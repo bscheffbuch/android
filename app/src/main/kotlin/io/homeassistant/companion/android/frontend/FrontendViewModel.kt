@@ -16,6 +16,7 @@ import io.homeassistant.companion.android.frontend.download.DownloadResult
 import io.homeassistant.companion.android.frontend.download.FrontendDownloadManager
 import io.homeassistant.companion.android.frontend.error.FrontendConnectionError
 import io.homeassistant.companion.android.frontend.error.FrontendConnectionErrorStateProvider
+import io.homeassistant.companion.android.frontend.exoplayer.FrontendExoPlayerManager
 import io.homeassistant.companion.android.frontend.externalbus.FrontendExternalBusRepository
 import io.homeassistant.companion.android.frontend.externalbus.outgoing.ResultMessage
 import io.homeassistant.companion.android.frontend.gesture.FrontendGestureHandler
@@ -82,6 +83,7 @@ internal class FrontendViewModel @VisibleForTesting constructor(
     private val gestureHandler: FrontendGestureHandler,
     private val prefsRepository: PrefsRepository,
     private val dialogManager: FrontendDialogManager,
+    private val exoPlayerManager: FrontendExoPlayerManager,
 ) : ViewModel(),
     FrontendConnectionErrorStateProvider {
 
@@ -99,6 +101,7 @@ internal class FrontendViewModel @VisibleForTesting constructor(
         gestureHandler: FrontendGestureHandler,
         prefsRepository: PrefsRepository,
         dialogManager: FrontendDialogManager,
+        exoPlayerManager: FrontendExoPlayerManager,
     ) : this(
         initialServerId = savedStateHandle.toRoute<FrontendRoute>().serverId,
         initialPath = savedStateHandle.toRoute<FrontendRoute>().path,
@@ -113,6 +116,7 @@ internal class FrontendViewModel @VisibleForTesting constructor(
         gestureHandler = gestureHandler,
         prefsRepository = prefsRepository,
         dialogManager = dialogManager,
+        exoPlayerManager = exoPlayerManager,
     )
 
     /**
@@ -246,7 +250,24 @@ internal class FrontendViewModel @VisibleForTesting constructor(
             }
         }
 
+        viewModelScope.launch {
+            exoPlayerManager.state.collect { exoState ->
+                _viewState.update { currentState ->
+                    if (currentState is FrontendViewState.Content) {
+                        currentState.copy(exoPlayerState = exoState)
+                    } else {
+                        currentState
+                    }
+                }
+            }
+        }
+
         loadServer()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        exoPlayerManager.close()
     }
 
     /**
@@ -385,6 +406,17 @@ internal class FrontendViewModel @VisibleForTesting constructor(
         }
     }
 
+    /**
+     * Called when the ExoPlayer fullscreen state changes.
+     *
+     * Updates the player UI state and emits a [FrontendEvent.RequestFullscreen] so the
+     * host activity can decide the actual system bar visibility.
+     */
+    fun onExoPlayerFullscreenChanged(isFullScreen: Boolean) {
+        exoPlayerManager.onFullscreenChanged(isFullScreen)
+        _events.tryEmit(FrontendEvent.RequestFullscreen(isFullScreen))
+    }
+
     private suspend fun handleGestureResult(result: GestureResult) {
         when (result) {
             is GestureResult.Navigate -> _events.emit(result.event)
@@ -472,6 +504,10 @@ internal class FrontendViewModel @VisibleForTesting constructor(
 
             is FrontendHandlerEvent.WriteNfcTag -> {
                 _events.tryEmit(FrontendEvent.NavigateToNfcWrite(messageId = result.messageId, tagId = result.tagId))
+            }
+
+            is FrontendHandlerEvent.ExoPlayerAction -> {
+                exoPlayerManager.handle(result)
             }
 
             is FrontendHandlerEvent.ConfigSent,

@@ -2,6 +2,7 @@ package io.homeassistant.companion.android.frontend
 
 import android.net.Uri
 import android.webkit.JsResult
+import androidx.lifecycle.ViewModel
 import app.cash.turbine.test
 import io.homeassistant.companion.android.common.R as commonR
 import io.homeassistant.companion.android.common.data.connectivity.ConnectivityCheckRepository
@@ -15,6 +16,7 @@ import io.homeassistant.companion.android.frontend.dialog.FrontendDialogManager
 import io.homeassistant.companion.android.frontend.download.DownloadResult
 import io.homeassistant.companion.android.frontend.download.FrontendDownloadManager
 import io.homeassistant.companion.android.frontend.error.FrontendConnectionError
+import io.homeassistant.companion.android.frontend.exoplayer.FrontendExoPlayerManager
 import io.homeassistant.companion.android.frontend.externalbus.FrontendExternalBusRepository
 import io.homeassistant.companion.android.frontend.externalbus.incoming.HapticType
 import io.homeassistant.companion.android.frontend.externalbus.outgoing.ResultMessage
@@ -88,6 +90,10 @@ class FrontendViewModelTest {
         every { connectivityCheckRepository.runChecks(any()) } returns flowOf(ConnectivityCheckState())
     }
 
+    private val exoPlayerManager: FrontendExoPlayerManager = mockk(relaxed = true) {
+        every { state } returns MutableStateFlow(null)
+    }
+
     private fun createViewModel(
         serverId: Int = this.serverId,
         path: String? = null,
@@ -107,6 +113,7 @@ class FrontendViewModelTest {
             gestureHandler = gestureHandler,
             prefsRepository = prefsRepository,
             dialogManager = dialogManager,
+            exoPlayerManager = exoPlayerManager,
         )
     }
 
@@ -1299,6 +1306,73 @@ class FrontendViewModelTest {
                     serverId = serverId,
                 )
             }
+        }
+    }
+
+    @Nested
+    inner class ExoPlayer {
+
+        @Test
+        fun `Given fullscreen true when onExoPlayerFullscreenChanged then manager is notified and RequestFullscreen true emitted`() = runTest {
+            every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
+                UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),
+            )
+            val viewModel = createViewModel()
+
+            viewModel.events.test {
+                viewModel.onExoPlayerFullscreenChanged(isFullScreen = true)
+                assertEquals(FrontendEvent.RequestFullscreen(fullscreen = true), awaitItem())
+                cancelAndIgnoreRemainingEvents()
+            }
+            verify { exoPlayerManager.onFullscreenChanged(isFullScreen = true) }
+        }
+
+        @Test
+        fun `Given fullscreen false when onExoPlayerFullscreenChanged then manager is notified and RequestFullscreen false emitted`() = runTest {
+            every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
+                UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),
+            )
+            val viewModel = createViewModel()
+
+            viewModel.events.test {
+                viewModel.onExoPlayerFullscreenChanged(isFullScreen = false)
+                assertEquals(FrontendEvent.RequestFullscreen(fullscreen = false), awaitItem())
+                cancelAndIgnoreRemainingEvents()
+            }
+            verify { exoPlayerManager.onFullscreenChanged(isFullScreen = false) }
+        }
+
+        @Test
+        fun `Given ExoPlayerAction message when handled then manager handle is called`() = runTest {
+            val messageFlow = MutableSharedFlow<FrontendHandlerEvent>()
+            every { frontendBusObserver.messageResults() } returns messageFlow
+            every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
+                UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),
+            )
+            createViewModel()
+
+            val action = FrontendHandlerEvent.ExoPlayerAction.Stop
+            messageFlow.emit(action)
+            advanceUntilIdle()
+
+            coVerify { exoPlayerManager.handle(action) }
+        }
+
+        @Test
+        fun `Given ViewModel is cleared when onCleared then manager is closed`() = runTest {
+            every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
+                UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),
+            )
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            // onCleared is protected on ViewModel; invoke it via reflection to simulate
+            // ViewModel lifecycle teardown without pulling in the full ViewModelStore machinery.
+            val onCleared = ViewModel::class.java.getDeclaredMethod("onCleared")
+            onCleared.isAccessible = true
+            onCleared.invoke(viewModel)
+
+            verify { exoPlayerManager.close() }
         }
     }
 }
