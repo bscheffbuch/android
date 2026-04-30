@@ -17,7 +17,7 @@ import io.homeassistant.companion.android.frontend.download.FrontendDownloadMana
 import io.homeassistant.companion.android.frontend.error.FrontendConnectionError
 import io.homeassistant.companion.android.frontend.error.FrontendConnectionErrorStateProvider
 import io.homeassistant.companion.android.frontend.externalbus.FrontendExternalBusRepository
-import io.homeassistant.companion.android.frontend.externalbus.outgoing.ResultMessage
+import io.homeassistant.companion.android.frontend.externalbus.outgoing.SuccessResultMessage
 import io.homeassistant.companion.android.frontend.gesture.FrontendGestureHandler
 import io.homeassistant.companion.android.frontend.gesture.GestureResult
 import io.homeassistant.companion.android.frontend.handler.FrontendBusObserver
@@ -364,7 +364,7 @@ internal class FrontendViewModel @VisibleForTesting constructor(
      */
     fun onNfcWriteCompleted(messageId: Int) {
         viewModelScope.launch {
-            externalBusRepository.send(ResultMessage.success(messageId))
+            externalBusRepository.send(SuccessResultMessage(messageId))
         }
     }
 

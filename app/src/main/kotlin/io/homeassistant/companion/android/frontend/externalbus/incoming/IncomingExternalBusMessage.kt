@@ -147,7 +147,7 @@ data class HapticMessage(override val id: Int? = null, val payload: HapticType) 
  * Message requesting the app to open the NFC tag-write flow.
  *
  * The optional [TagWritePayload.tag] is a pre-filled tag identifier. When null or missing, the
- * user is prompted to enter/scan a tag manually. Once handled, a [io.homeassistant.companion.android.frontend.externalbus.outgoing.ResultMessage.success]
+ * user is prompted to enter/scan a tag manually. Once handled, a [io.homeassistant.companion.android.frontend.externalbus.outgoing.SuccessResultMessage]
  * should be sent back to the frontend with the [id].
  */
 @Serializable
@@ -170,3 +170,22 @@ data class TagWritePayload(val tag: String? = null)
 @SerialName("handleBlob")
 data class HandleBlobMessage(override val id: Int? = null, val data: String, val filename: String) :
     IncomingExternalBusMessage
+
+@Serializable
+@SerialName("entity/add_to/get_actions")
+data class EntityAddToGetActionsMessage(override val id: Int? = null, val payload: EntityAddToGetActionsPayload) :
+    IncomingExternalBusMessage
+
+@Serializable
+data class EntityAddToGetActionsPayload(@SerialName("entity_id") val entityId: String)
+
+@Serializable
+@SerialName("entity/add_to")
+data class EntityAddToMessage(override val id: Int? = null, val payload: EntityAddToPayload) :
+    IncomingExternalBusMessage
+
+@Serializable
+data class EntityAddToPayload(
+    @SerialName("entity_id") val entityId: String,
+    @SerialName("app_payload") val appPayload: String,
+)

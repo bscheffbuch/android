@@ -17,7 +17,7 @@ import io.homeassistant.companion.android.frontend.download.FrontendDownloadMana
 import io.homeassistant.companion.android.frontend.error.FrontendConnectionError
 import io.homeassistant.companion.android.frontend.externalbus.FrontendExternalBusRepository
 import io.homeassistant.companion.android.frontend.externalbus.incoming.HapticType
-import io.homeassistant.companion.android.frontend.externalbus.outgoing.ResultMessage
+import io.homeassistant.companion.android.frontend.externalbus.outgoing.SuccessResultMessage
 import io.homeassistant.companion.android.frontend.gesture.FrontendGestureHandler
 import io.homeassistant.companion.android.frontend.gesture.GestureResult
 import io.homeassistant.companion.android.frontend.handler.FrontendBusObserver
@@ -48,7 +48,6 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -679,9 +678,7 @@ class FrontendViewModelTest {
             advanceUntilIdle()
 
             coVerify {
-                externalBusRepository.send(
-                    ResultMessage(id = 42, success = true, result = JsonObject(emptyMap())),
-                )
+                externalBusRepository.send(SuccessResultMessage(id = 42))
             }
         }
     }
