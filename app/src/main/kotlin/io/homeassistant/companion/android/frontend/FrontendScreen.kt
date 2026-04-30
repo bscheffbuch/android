@@ -8,6 +8,7 @@ import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,8 +39,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.homeassistant.companion.android.common.R as commonR
@@ -77,6 +80,10 @@ import timber.log.Timber
 
 /** Minimum swipe velocity (pixels/second) to trigger a gesture action. */
 private const val MINIMUM_GESTURE_VELOCITY = 75f
+
+/** Test tag applied to the WebView custom view fullscreen overlay. */
+@VisibleForTesting
+internal const val CUSTOM_VIEW_OVERLAY_TAG = "custom_view_overlay"
 
 /**
  * Frontend screen that renders based on the ViewModel's current view state.
@@ -216,6 +223,8 @@ internal fun FrontendScreenContent(
             contentState = viewState as? FrontendViewState.Content,
             onFullscreenChanged = onExoPlayerFullscreenChanged,
         )
+
+        CustomViewOverlay(contentState = viewState as? FrontendViewState.Content)
 
         StateOverlay(
             viewState = viewState,
@@ -604,6 +613,17 @@ private fun WebViewEffects(
             }
         }
     }
+}
+
+@Composable
+private fun CustomViewOverlay(contentState: FrontendViewState.Content?) {
+    val view: View = contentState?.customView ?: return
+    AndroidView(
+        factory = { view },
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(CUSTOM_VIEW_OVERLAY_TAG),
+    )
 }
 
 @Composable

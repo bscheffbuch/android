@@ -1,5 +1,6 @@
 package io.homeassistant.companion.android.frontend
 
+import android.view.View
 import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -208,6 +209,10 @@ internal class FrontendViewModel @VisibleForTesting constructor(
             }
             true
         },
+        onShowCustomView = ::onUpdateCustomView,
+        onHideCustomView = {
+            onUpdateCustomView(null)
+        },
     )
 
     /** The current pending permission request that needs user approval, or null if none. */
@@ -409,6 +414,17 @@ internal class FrontendViewModel @VisibleForTesting constructor(
     fun onExoPlayerFullscreenChanged(isFullScreen: Boolean) {
         exoPlayerManager.onFullscreenChanged(isFullScreen)
         _events.tryEmit(FrontendEvent.RequestFullscreen(isFullScreen))
+    }
+
+    private fun onUpdateCustomView(view: View?) {
+        _viewState.update { currentState ->
+            if (currentState is FrontendViewState.Content) {
+                currentState.copy(customView = view)
+            } else {
+                currentState
+            }
+        }
+        _events.tryEmit(FrontendEvent.RequestFullscreen(fullscreen = view != null))
     }
 
     private suspend fun handleGestureResult(result: GestureResult) {

@@ -1,6 +1,7 @@
 package io.homeassistant.companion.android.frontend
 
 import android.net.Uri
+import android.view.View
 import android.webkit.JsResult
 import androidx.lifecycle.ViewModel
 import androidx.media3.common.Player
@@ -56,6 +57,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Nested
@@ -1445,6 +1448,95 @@ class FrontendViewModelTest {
             onCleared.invoke(viewModel)
 
             verify { exoPlayerManager.close() }
+        }
+    }
+
+    @Nested
+    inner class CustomView {
+
+        @Test
+        fun `Given Content state when onShowCustomView then customView is set on Content`() = runTest {
+            every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
+                UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),
+            )
+            val messageFlow = MutableSharedFlow<FrontendHandlerEvent>()
+            every { frontendBusObserver.messageResults() } returns messageFlow
+
+            val viewModel = createViewModel()
+            messageFlow.emit(FrontendHandlerEvent.Connected)
+            advanceUntilIdle()
+
+            val customView = mockk<View>(relaxed = true)
+            viewModel.webChromeClient.onShowCustomView(customView, mockk(relaxed = true))
+
+            val current = viewModel.viewState.value
+            assertTrue(current is FrontendViewState.Content)
+            assertSame(customView, (current as FrontendViewState.Content).customView)
+        }
+
+        @Test
+        fun `Given Content state when onHideCustomView then customView is cleared`() = runTest {
+            every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
+                UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),
+            )
+            val messageFlow = MutableSharedFlow<FrontendHandlerEvent>()
+            every { frontendBusObserver.messageResults() } returns messageFlow
+
+            val viewModel = createViewModel()
+            messageFlow.emit(FrontendHandlerEvent.Connected)
+            advanceUntilIdle()
+            viewModel.webChromeClient.onShowCustomView(mockk<View>(relaxed = true), mockk(relaxed = true))
+
+            viewModel.webChromeClient.onHideCustomView()
+
+            val current = viewModel.viewState.value
+            assertTrue(current is FrontendViewState.Content)
+            assertNull((current as FrontendViewState.Content).customView)
+        }
+
+        @Test
+        fun `Given non-Content state when onShowCustomView then state is unchanged`() = runTest {
+            every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
+                UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),
+            )
+            val viewModel = createViewModel()
+            // Stay before the connection timeout so we remain in Loading.
+            advanceTimeBy(CONNECTION_TIMEOUT - 1.seconds)
+            assertTrue(viewModel.viewState.value is FrontendViewState.Loading)
+
+            viewModel.webChromeClient.onShowCustomView(mockk<View>(relaxed = true), mockk(relaxed = true))
+
+            assertTrue(viewModel.viewState.value is FrontendViewState.Loading)
+        }
+
+        @Test
+        fun `Given onShowCustomView when invoked then RequestFullscreen true emitted`() = runTest {
+            every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
+                UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),
+            )
+            val viewModel = createViewModel()
+
+            viewModel.events.test {
+                viewModel.webChromeClient.onShowCustomView(mockk<View>(relaxed = true), mockk(relaxed = true))
+                assertEquals(FrontendEvent.RequestFullscreen(fullscreen = true), awaitItem())
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+        @Test
+        fun `Given onHideCustomView when invoked then RequestFullscreen false emitted`() = runTest {
+            every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
+                UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),
+            )
+            val viewModel = createViewModel()
+
+            viewModel.events.test {
+                viewModel.webChromeClient.onShowCustomView(mockk<View>(relaxed = true), mockk(relaxed = true))
+                assertEquals(FrontendEvent.RequestFullscreen(fullscreen = true), awaitItem())
+                viewModel.webChromeClient.onHideCustomView()
+                assertEquals(FrontendEvent.RequestFullscreen(fullscreen = false), awaitItem())
+                cancelAndIgnoreRemainingEvents()
+            }
         }
     }
 }
