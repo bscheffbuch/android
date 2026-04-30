@@ -119,6 +119,16 @@ internal fun FrontendScreen(
     val pendingPermissionRequest by viewModel.pendingPermissionRequest.collectAsStateWithLifecycle()
     val pendingDialog by viewModel.pendingDialog.collectAsStateWithLifecycle()
 
+    // The fullscreen View handed over by the WebView is Activity-scoped. Keep it in screen
+    // state so it does not leak across configuration changes via the ViewModel.
+    var customView by remember { mutableStateOf<View?>(null) }
+    val webChromeClient = remember(viewModel) {
+        viewModel.createWebChromeClient(
+            onShowCustomView = { customView = it },
+            onHideCustomView = { customView = null },
+        )
+    }
+
     // Create SecurityLevel ViewModel only when needed
     val securityLevelViewModel: LocationForSecureConnectionViewModel? =
         if (viewState is FrontendViewState.SecurityLevelRequired) {
@@ -134,7 +144,8 @@ internal fun FrontendScreen(
         viewState = viewState,
         errorStateProvider = viewModel as FrontendConnectionErrorStateProvider,
         webViewClient = viewModel.webViewClient,
-        webChromeClient = viewModel.webChromeClient,
+        webChromeClient = webChromeClient,
+        customView = customView,
         frontendJsCallback = viewModel.frontendJsCallback,
         pendingPermissionRequest = pendingPermissionRequest,
         pendingDialog = pendingDialog,
@@ -177,6 +188,7 @@ internal fun FrontendScreenContent(
     onShowSnackbar: suspend (message: String, action: String?) -> Boolean,
     onWebViewCreationFailed: (Throwable) -> Unit,
     modifier: Modifier = Modifier,
+    customView: View? = null,
     pendingPermissionRequest: PermissionRequest<*>? = null,
     pendingDialog: FrontendDialog? = null,
     onClearPendingPermissionRequest: () -> Unit = {},
@@ -224,7 +236,7 @@ internal fun FrontendScreenContent(
             onFullscreenChanged = onExoPlayerFullscreenChanged,
         )
 
-        CustomViewOverlay(contentState = viewState as? FrontendViewState.Content)
+        CustomViewOverlay(customView = customView)
 
         StateOverlay(
             viewState = viewState,
@@ -616,8 +628,8 @@ private fun WebViewEffects(
 }
 
 @Composable
-private fun CustomViewOverlay(contentState: FrontendViewState.Content?) {
-    val view: View = contentState?.customView ?: return
+private fun CustomViewOverlay(customView: View?) {
+    val view: View = customView ?: return
     AndroidView(
         factory = { view },
         modifier = Modifier

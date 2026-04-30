@@ -261,8 +261,8 @@ class FrontendScreenScreenshotTest {
                 viewState = FrontendViewState.Content(
                     serverId = 1,
                     url = "https://example.com",
-                    customView = view,
                 ),
+                customView = view,
                 webViewClient = WebViewClient(),
                 webChromeClient = WebChromeClient(),
                 frontendJsCallback = FrontendJsBridge.noOp,

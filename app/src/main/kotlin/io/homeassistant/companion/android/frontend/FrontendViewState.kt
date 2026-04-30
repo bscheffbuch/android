@@ -1,6 +1,5 @@
 package io.homeassistant.companion.android.frontend
 
-import android.view.View
 import androidx.compose.ui.graphics.Color
 import io.homeassistant.companion.android.common.data.prefs.NightModeTheme
 import io.homeassistant.companion.android.frontend.error.FrontendConnectionError
@@ -57,7 +56,6 @@ sealed interface FrontendViewState {
         val statusBarColor: Color? = null,
         val backgroundColor: Color? = null,
         val exoPlayerState: ExoPlayerUiState? = null,
-        val customView: View? = null,
     ) : FrontendViewState
 
     /**

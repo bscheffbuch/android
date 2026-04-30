@@ -197,24 +197,6 @@ internal class FrontendViewModel @VisibleForTesting constructor(
         onPageFinished = ::onPageFinished,
     )
 
-    val webChromeClient: HAWebChromeClient = HAWebChromeClient(
-        onPermissionRequest = { request ->
-            viewModelScope.launch {
-                permissionManager.onWebViewPermissionRequest(request)
-            }
-        },
-        onJsConfirm = { message, jsResult ->
-            viewModelScope.launch {
-                if (dialogManager.showJsConfirm(message)) jsResult.confirm() else jsResult.cancel()
-            }
-            true
-        },
-        onShowCustomView = ::onUpdateCustomView,
-        onHideCustomView = {
-            onUpdateCustomView(null)
-        },
-    )
-
     /** The current pending permission request that needs user approval, or null if none. */
     val pendingPermissionRequest = permissionManager.pendingPermissionRequest
 
@@ -282,6 +264,40 @@ internal class FrontendViewModel @VisibleForTesting constructor(
             }
         }
     }
+
+    /**
+     * Builds an [HAWebChromeClient] wired to this ViewModel for permission/JS handling, while
+     * delegating WebView fullscreen view ownership to the caller.
+     *
+     * The fullscreen [android.view.View] handed over by `onShowCustomView` is bound to the
+     * WebView's Activity context. Holding it in ViewModel state would leak that Activity across
+     * configuration changes, so the caller (a Composable) keeps the View in screen-scoped state
+     * and supplies setters via [onShowCustomView] and [onHideCustomView]. The ViewModel still
+     * owns the system-fullscreen request and emits [FrontendEvent.RequestFullscreen] on the
+     * caller's behalf.
+     */
+    fun createWebChromeClient(onShowCustomView: (View) -> Unit, onHideCustomView: () -> Unit): HAWebChromeClient =
+        HAWebChromeClient(
+            onPermissionRequest = { request ->
+                viewModelScope.launch {
+                    permissionManager.onWebViewPermissionRequest(request)
+                }
+            },
+            onJsConfirm = { message, jsResult ->
+                viewModelScope.launch {
+                    if (dialogManager.showJsConfirm(message)) jsResult.confirm() else jsResult.cancel()
+                }
+                true
+            },
+            onShowCustomView = { view ->
+                onShowCustomView(view)
+                _events.tryEmit(FrontendEvent.RequestFullscreen(fullscreen = true))
+            },
+            onHideCustomView = {
+                onHideCustomView()
+                _events.tryEmit(FrontendEvent.RequestFullscreen(fullscreen = false))
+            },
+        )
 
     fun onRetry() {
         _viewState.update {
@@ -414,17 +430,6 @@ internal class FrontendViewModel @VisibleForTesting constructor(
     fun onExoPlayerFullscreenChanged(isFullScreen: Boolean) {
         exoPlayerManager.onFullscreenChanged(isFullScreen)
         _events.tryEmit(FrontendEvent.RequestFullscreen(isFullScreen))
-    }
-
-    private fun onUpdateCustomView(view: View?) {
-        _viewState.update { currentState ->
-            if (currentState is FrontendViewState.Content) {
-                currentState.copy(customView = view)
-            } else {
-                currentState
-            }
-        }
-        _events.tryEmit(FrontendEvent.RequestFullscreen(fullscreen = view != null))
     }
 
     private suspend fun handleGestureResult(result: GestureResult) {
