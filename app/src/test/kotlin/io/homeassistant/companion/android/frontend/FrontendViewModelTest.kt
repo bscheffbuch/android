@@ -667,6 +667,77 @@ class FrontendViewModelTest {
         }
 
         @Test
+        fun `Given EntityAddToExecuted with event when collected then event is forwarded`() = runTest {
+            val messageFlow = MutableSharedFlow<FrontendHandlerEvent>()
+            every { frontendBusObserver.messageResults() } returns messageFlow
+            every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
+                UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),
+            )
+
+            val viewModel = createViewModel()
+
+            viewModel.events.test {
+                advanceTimeBy(CONNECTION_TIMEOUT - 1.seconds)
+
+                messageFlow.emit(
+                    FrontendHandlerEvent.EntityAddToExecuted(
+                        FrontendEvent.LaunchWidgetConfig(
+                            entityId = "light.test",
+                            widgetType = io.homeassistant.companion.android.frontend.navigation.WidgetType.Entity,
+                        ),
+                    ),
+                )
+
+                val event = awaitItem()
+                assertTrue(event is FrontendEvent.LaunchWidgetConfig)
+                assertEquals("light.test", (event as FrontendEvent.LaunchWidgetConfig).entityId)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+        @Test
+        fun `Given EntityAddToExecuted with null event when collected then no event is emitted`() = runTest {
+            val messageFlow = MutableSharedFlow<FrontendHandlerEvent>()
+            every { frontendBusObserver.messageResults() } returns messageFlow
+            every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
+                UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),
+            )
+
+            val viewModel = createViewModel()
+
+            viewModel.events.test {
+                advanceTimeBy(CONNECTION_TIMEOUT - 1.seconds)
+
+                messageFlow.emit(FrontendHandlerEvent.EntityAddToExecuted(event = null))
+                advanceUntilIdle()
+
+                expectNoEvents()
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+        @Test
+        fun `Given EntityAddToActionsSent when collected then no event is emitted`() = runTest {
+            val messageFlow = MutableSharedFlow<FrontendHandlerEvent>()
+            every { frontendBusObserver.messageResults() } returns messageFlow
+            every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
+                UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),
+            )
+
+            val viewModel = createViewModel()
+
+            viewModel.events.test {
+                advanceTimeBy(CONNECTION_TIMEOUT - 1.seconds)
+
+                messageFlow.emit(FrontendHandlerEvent.EntityAddToActionsSent)
+                advanceUntilIdle()
+
+                expectNoEvents()
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+        @Test
         fun `Given onNfcWriteCompleted when called then sends empty-result ResultMessage back to frontend`() = runTest {
             every { urlManager.serverUrlFlow(any(), any()) } returns flowOf(
                 UrlLoadResult.Success(url = testUrlWithAuth, serverId = serverId),

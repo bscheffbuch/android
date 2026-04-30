@@ -474,8 +474,13 @@ internal class FrontendViewModel @VisibleForTesting constructor(
                 _events.tryEmit(FrontendEvent.NavigateToNfcWrite(messageId = result.messageId, tagId = result.tagId))
             }
 
+            is FrontendHandlerEvent.EntityAddToExecuted -> {
+                result.event?.let { _events.tryEmit(it) }
+            }
+
             is FrontendHandlerEvent.ConfigSent,
             is FrontendHandlerEvent.UnknownMessage,
+            is FrontendHandlerEvent.EntityAddToActionsSent,
             -> {
                 // No-op
             }

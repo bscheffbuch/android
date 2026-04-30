@@ -49,6 +49,7 @@ class FrontendEventHandlerTest {
                 onOpenExternalLink = {},
                 onShowServerSwitcher = {},
                 onNavigateToNfcWrite = { _, _ -> },
+                onLaunchWidgetConfig = { _, _ -> },
             )
         }
 
@@ -78,6 +79,7 @@ class FrontendEventHandlerTest {
                 onOpenExternalLink = {},
                 onShowServerSwitcher = {},
                 onNavigateToNfcWrite = { _, _ -> },
+                onLaunchWidgetConfig = { _, _ -> },
             )
         }
 
@@ -109,6 +111,7 @@ class FrontendEventHandlerTest {
                 onOpenExternalLink = {},
                 onShowServerSwitcher = {},
                 onNavigateToNfcWrite = { _, _ -> },
+                onLaunchWidgetConfig = { _, _ -> },
             )
         }
 
@@ -146,6 +149,7 @@ class FrontendEventHandlerTest {
                 onOpenExternalLink = {},
                 onShowServerSwitcher = {},
                 onNavigateToNfcWrite = { _, _ -> },
+                onLaunchWidgetConfig = { _, _ -> },
             )
         }
 
@@ -171,6 +175,7 @@ class FrontendEventHandlerTest {
                 onOpenExternalLink = { uri -> capturedUri = uri },
                 onShowServerSwitcher = {},
                 onNavigateToNfcWrite = { _, _ -> },
+                onLaunchWidgetConfig = { _, _ -> },
             )
         }
 
@@ -196,6 +201,7 @@ class FrontendEventHandlerTest {
                 onOpenExternalLink = {},
                 onShowServerSwitcher = { serverSwitcherShown = true },
                 onNavigateToNfcWrite = { _, _ -> },
+                onLaunchWidgetConfig = { _, _ -> },
             )
         }
 
@@ -224,6 +230,7 @@ class FrontendEventHandlerTest {
                 onOpenExternalLink = {},
                 onShowServerSwitcher = {},
                 onNavigateToNfcWrite = { _, _ -> },
+                onLaunchWidgetConfig = { _, _ -> },
             )
         }
 
@@ -253,6 +260,7 @@ class FrontendEventHandlerTest {
                     capturedMessageId = messageId
                     capturedTagId = tagId
                 },
+                onLaunchWidgetConfig = { _, _ -> },
             )
         }
 
@@ -282,6 +290,7 @@ class FrontendEventHandlerTest {
                     capturedMessageId = messageId
                     capturedTagId = tagId
                 },
+                onLaunchWidgetConfig = { _, _ -> },
             )
         }
 

@@ -3,6 +3,7 @@ package io.homeassistant.companion.android.frontend.handler
 import io.homeassistant.companion.android.frontend.download.DownloadResult
 import io.homeassistant.companion.android.frontend.error.FrontendConnectionError
 import io.homeassistant.companion.android.frontend.externalbus.incoming.HapticType
+import io.homeassistant.companion.android.frontend.navigation.FrontendEvent
 
 /**
  * Events emitted by [FrontendMessageHandler].
@@ -79,4 +80,17 @@ sealed interface FrontendHandlerEvent {
      * @param tagId Optional pre-filled tag identifier. When null, the user is prompted to enter one.
      */
     data class WriteNfcTag(val messageId: Int, val tagId: String?) : FrontendHandlerEvent
+
+    /**
+     * Frontend requested available EntityAddTo actions and the response was sent.
+     */
+    data object EntityAddToActionsSent : FrontendHandlerEvent
+
+    /**
+     * Frontend requested execution of an EntityAddTo action.
+     *
+     * The ViewModel should forward the [event] to the navigation layer.
+     * When null, the action is unimplemented and should be ignored.
+     */
+    data class EntityAddToExecuted(val event: FrontendEvent?) : FrontendHandlerEvent
 }
