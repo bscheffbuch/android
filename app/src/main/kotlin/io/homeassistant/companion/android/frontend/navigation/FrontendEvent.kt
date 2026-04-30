@@ -55,4 +55,12 @@ sealed interface FrontendEvent {
      * @param tagId Optional pre-filled tag identifier.
      */
     data class NavigateToNfcWrite(val messageId: Int, val tagId: String?) : FrontendEvent
+
+    /**
+     * Launch a widget configuration screen for the given entity.
+     *
+     * @param entityId The entity to pre-fill in the widget configuration
+     * @param widgetType The type of widget to configure
+     */
+    data class LaunchWidgetConfig(val entityId: String, val widgetType: WidgetType) : FrontendEvent
 }
