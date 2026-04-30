@@ -622,7 +622,7 @@ class LaunchViewModelTest {
     }
 
     @Test
-    fun `Given fullscreen requested when preference is disabled then isFullScreen stays true`() = runTest {
+    fun `Given fullscreen request is active when preference turns off then isFullScreen stays true`() = runTest {
         fullScreenEnabledFlow.value = true
         createViewModel()
         viewModel.onFullscreenRequested(fullscreen = true)
