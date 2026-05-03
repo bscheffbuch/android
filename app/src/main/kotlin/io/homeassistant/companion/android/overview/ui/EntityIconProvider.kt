@@ -5,7 +5,7 @@ import androidx.compose.material.icons.rounded.AcUnit
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.DoorFront
-import androidx.compose.material.icons.rounded.Fan
+import androidx.compose.material.icons.rounded.Air
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
@@ -22,7 +22,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 internal object EntityIconProvider {
     fun iconForDomain(domain: String, isActive: Boolean): ImageVector = when (domain) {
         "switch", "input_boolean" -> if (isActive) Icons.Rounded.ToggleOn else Icons.Rounded.ToggleOff
-        "fan" -> Icons.Rounded.Fan
+        "fan" -> Icons.Rounded.Air
         "cover" -> Icons.Rounded.DoorFront
         "lock" -> if (isActive) Icons.Rounded.Lock else Icons.Rounded.LockOpen
         "climate" -> if (isActive) Icons.Rounded.AcUnit else Icons.Rounded.AcUnit
