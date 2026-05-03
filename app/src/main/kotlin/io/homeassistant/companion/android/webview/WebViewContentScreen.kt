@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.media3.common.Player
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
@@ -131,17 +133,22 @@ internal fun WebViewContentScreen(
                 }
 
                 if (customViewFromWebView == null && !currentAppLocked) {
-                    FloatingActionButton(
-                        onClick = onOverviewClicked,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .navigationBarsPadding()
-                            .padding(16.dp),
+                    // Use Popup so the FAB renders above the AndroidView-backed WebView
+                    Popup(
+                        alignment = Alignment.BottomEnd,
+                        properties = PopupProperties(focusable = false),
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.GridView,
-                            contentDescription = stringResource(commonR.string.overview_title),
-                        )
+                        FloatingActionButton(
+                            onClick = onOverviewClicked,
+                            modifier = Modifier
+                                .navigationBarsPadding()
+                                .padding(16.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.GridView,
+                                contentDescription = stringResource(commonR.string.overview_title),
+                            )
+                        }
                     }
                 }
             }
