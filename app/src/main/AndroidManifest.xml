@@ -1045,6 +1045,11 @@
             android:foregroundServiceType="dataSync|remoteMessaging"
             tools:node="merge" />
 
+        <activity
+            android:name=".overview.OverviewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.HomeAssistant" />
+
     </application>
 
 </manifest>
