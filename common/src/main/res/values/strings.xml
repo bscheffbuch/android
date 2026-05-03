@@ -1469,4 +1469,7 @@
     <string name="fail_to_navigate_to_uri">No app available to open %s</string>
     <string name="experimental">Experimental</string>
     <string name="learn_more">Learn more</string>
+    <string name="overview_title">Overview</string>
+    <string name="overview_brightness">Brightness</string>
+    <string name="overview_attributes">Attributes</string>
 </resources>
