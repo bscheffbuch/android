@@ -171,6 +171,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.json.JSONObject
+import io.homeassistant.companion.android.overview.OverviewActivity
 import timber.log.Timber
 
 @AndroidEntryPoint
@@ -447,6 +448,9 @@ class WebViewActivity :
                         presenter.onNotificationPermissionResult(granted)
                         shouldAskNotificationPermission = false
                     }
+                },
+                onOverviewClicked = {
+                    startActivity(OverviewActivity.newInstance(this@WebViewActivity))
                 },
             )
         }
