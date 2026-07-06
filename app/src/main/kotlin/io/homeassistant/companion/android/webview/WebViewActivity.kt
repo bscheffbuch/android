@@ -46,8 +46,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -57,7 +63,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -93,6 +101,7 @@ import io.homeassistant.companion.android.assist.AssistActivity
 import io.homeassistant.companion.android.authenticator.Authenticator
 import io.homeassistant.companion.android.barcode.BarcodeScannerActivity
 import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.theme.HATheme
 import io.homeassistant.companion.android.common.data.keychain.KeyChainRepository
 import io.homeassistant.companion.android.common.data.keychain.NamedKeyChain
 import io.homeassistant.companion.android.common.data.prefs.NightModeTheme
@@ -132,6 +141,7 @@ import io.homeassistant.companion.android.improv.ui.ImprovPermissionDialog
 import io.homeassistant.companion.android.improv.ui.ImprovSetupDialog
 import io.homeassistant.companion.android.launch.LaunchActivity
 import io.homeassistant.companion.android.nfc.WriteNfcTag
+import io.homeassistant.companion.android.overview.OverviewActivity
 import io.homeassistant.companion.android.sensors.SensorReceiver
 import io.homeassistant.companion.android.sensors.SensorWorker
 import io.homeassistant.companion.android.settings.ConnectionSecurityLevelFragment
@@ -171,7 +181,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.json.JSONObject
-import io.homeassistant.companion.android.overview.OverviewActivity
 import timber.log.Timber
 
 @AndroidEntryPoint
@@ -458,6 +467,48 @@ class WebViewActivity :
         authenticator = Authenticator(this, this, ::authenticationResult)
 
         decor = window.decorView as FrameLayout
+
+        // Add Overview FAB as a WindowManager overlay so it renders above the WebView surface
+        // regardless of z-ordering. TYPE_APPLICATION creates a child window attached to this
+        // activity; FLAG_NOT_FOCUSABLE lets touches pass through to the WebView beneath.
+        val overviewWindowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val fabView = ComposeView(this).apply {
+            setViewCompositionStrategy(
+                androidx.compose.ui.platform.ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool,
+            )
+            setContent {
+                HATheme {
+                    FloatingActionButton(
+                        onClick = { startActivity(OverviewActivity.newInstance(this@WebViewActivity)) },
+                        modifier = Modifier.navigationBarsPadding().padding(end = 16.dp, bottom = 16.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.GridView,
+                            contentDescription = getString(commonR.string.overview_title),
+                        )
+                    }
+                }
+            }
+        }
+        val fabWindowParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            android.graphics.PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = android.view.Gravity.BOTTOM or android.view.Gravity.END
+        }
+        overviewWindowManager.addView(fabView, fabWindowParams)
+        lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+            override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
+                try {
+                    overviewWindowManager.removeView(fabView)
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to remove overview FAB window")
+                }
+            }
+        })
 
         val onBackPressed = object : OnBackPressedCallback(webView.canGoBack()) {
             override fun handleOnBackPressed() {

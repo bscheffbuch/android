@@ -162,7 +162,7 @@ class LaunchActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (WIPFeature.USE_FRONTEND_V2) {
+        if (WIPFeature.USE_FRONTEND_V2 || WIPFeature.USE_NATIVE_OVERVIEW_LANDING) {
             SensorWorker.start(this)
             lifecycleScope.launch {
                 WebsocketManager.start(this@LaunchActivity)
@@ -174,7 +174,9 @@ class LaunchActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        if (!isFinishing && WIPFeature.USE_FRONTEND_V2) SensorReceiver.updateAllSensors(this)
+        if (!isFinishing && (WIPFeature.USE_FRONTEND_V2 || WIPFeature.USE_NATIVE_OVERVIEW_LANDING)) {
+            SensorReceiver.updateAllSensors(this)
+        }
     }
 }
 

@@ -9,6 +9,7 @@ import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.homeassistant.companion.android.BuildConfig
+import io.homeassistant.companion.android.WIPFeature
 import io.homeassistant.companion.android.automotive.navigation.AutomotiveRoute
 import io.homeassistant.companion.android.common.data.authentication.SessionState
 import io.homeassistant.companion.android.common.data.network.NetworkState
@@ -22,6 +23,7 @@ import io.homeassistant.companion.android.di.qualifiers.LocationTrackingSupport
 import io.homeassistant.companion.android.frontend.navigation.FrontendRoute
 import io.homeassistant.companion.android.onboarding.OnboardingRoute
 import io.homeassistant.companion.android.onboarding.WearOnboardingRoute
+import io.homeassistant.companion.android.overview.navigation.OverviewLandingRoute
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -77,6 +79,7 @@ internal class LaunchViewModel @VisibleForTesting constructor(
     private val hasLocationTrackingSupport: Boolean,
     isAutomotive: Boolean,
     isFullFlavor: Boolean,
+    private val useNativeOverviewLanding: Boolean,
 ) : ViewModel() {
 
     @AssistedInject
@@ -97,6 +100,7 @@ internal class LaunchViewModel @VisibleForTesting constructor(
         hasLocationTrackingSupport,
         isAutomotive = isAutomotive,
         isFullFlavor = BuildConfig.FLAVOR == "full",
+        useNativeOverviewLanding = WIPFeature.USE_NATIVE_OVERVIEW_LANDING,
     )
 
     /**
@@ -137,18 +141,18 @@ internal class LaunchViewModel @VisibleForTesting constructor(
             )
 
             is LaunchActivity.DeepLink.NavigateTo,
-            -> connectToServer(initialDeepLink.serverId, initialDeepLink.path)
+            -> connectToServer(initialDeepLink.serverId, initialDeepLink.path, hadExplicitDeepLink = true)
 
             is LaunchActivity.DeepLink.OpenWearOnboarding -> navigateToWearOnboarding(
                 wearName = initialDeepLink.wearName,
                 urlToOnboard = initialDeepLink.urlToOnboard,
             )
 
-            null -> connectToServer(ServerManager.SERVER_ID_ACTIVE, null)
+            null -> connectToServer(ServerManager.SERVER_ID_ACTIVE, null, hadExplicitDeepLink = false)
         }
     }
 
-    private suspend fun connectToServer(serverId: Int, path: String?) {
+    private suspend fun connectToServer(serverId: Int, path: String?, hadExplicitDeepLink: Boolean) {
         try {
             getServerConnectedAndRegistered(serverId)?.let { server ->
                 Timber.d("Server (id=${server.id}) is connected and registered checking network status")
@@ -156,7 +160,7 @@ internal class LaunchViewModel @VisibleForTesting constructor(
                 networkStatusMonitor.observeNetworkStatus(serverManager.connectionStateProvider(server.id))
                     .takeWhile { state ->
                         // Until the network is ready we continue to observe network status changes
-                        !handleNetworkState(state, path, serverId)
+                        !handleNetworkState(state, path, serverId, hadExplicitDeepLink)
                     }.collect()
             } ?: navigateToOnboarding()
         } catch (e: IllegalStateException) {
@@ -221,16 +225,22 @@ internal class LaunchViewModel @VisibleForTesting constructor(
             .forEach { serverManager.removeServer(it.id) }
     }
 
-    private fun handleNetworkState(state: NetworkState, path: String?, serverId: Int): Boolean {
+    private fun handleNetworkState(
+        state: NetworkState,
+        path: String?,
+        serverId: Int,
+        hadExplicitDeepLink: Boolean,
+    ): Boolean {
         Timber.i("Current network state $state")
         return when (state) {
             NetworkState.READY_INTERNAL, NetworkState.READY_NET_VALIDATED, NetworkState.READY_NET_LOCAL -> {
                 workManager.enqueueResyncRegistration()
                 _uiState.value = LaunchUiState.Ready(
-                    if (shouldNavigateToAutomotive) {
-                        AutomotiveRoute
-                    } else {
-                        FrontendRoute(path, serverId)
+                    when {
+                        shouldNavigateToAutomotive -> AutomotiveRoute
+                        hadExplicitDeepLink -> FrontendRoute(path, serverId)
+                        useNativeOverviewLanding -> OverviewLandingRoute
+                        else -> FrontendRoute(path, serverId)
                     },
                 )
                 true

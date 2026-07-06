@@ -12,9 +12,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,28 +25,37 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.theme.HAThemeForPreview
 import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import io.homeassistant.companion.android.common.data.integration.Entity
 import io.homeassistant.companion.android.common.data.integration.isActive
+import java.time.LocalDateTime
 
 private val OnStateBorderWidth = 2.dp
 
 /**
- * A generic card for non-light entities.
+ * A card for automation entities, adding a "run now" action alongside the usual enable/disable
+ * toggle.
  *
  * Gestures:
- * - Tap: toggle on/off
+ * - Tap: toggle enabled/disabled
  * - Long press: open detail sheet
+ * - Tap the trailing icon button: trigger the automation immediately, independent of its
+ *   enabled/disabled state
  */
 @Composable
-fun GenericEntityCard(
+fun AutomationEntityCard(
     entity: Entity,
     onToggle: () -> Unit,
     onOpenDetail: () -> Unit,
+    onTriggerNow: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
@@ -89,7 +101,7 @@ fun GenericEntityCard(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -116,7 +128,48 @@ fun GenericEntityCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                IconButton(onClick = onTriggerNow, enabled = enabled) {
+                    Icon(
+                        imageVector = Icons.Rounded.PlayArrow,
+                        contentDescription = stringResource(commonR.string.overview_automation_run_now),
+                        tint = iconTint,
+                    )
+                }
             }
         }
+    }
+}
+
+private fun previewEntity(state: String) = Entity(
+    entityId = "automation.morning_routine",
+    state = state,
+    attributes = mapOf("friendly_name" to "Morning routine"),
+    lastChanged = LocalDateTime.now(),
+    lastUpdated = LocalDateTime.now(),
+)
+
+@PreviewLightDark
+@Composable
+private fun AutomationEntityCardOnPreview() {
+    HAThemeForPreview {
+        AutomationEntityCard(
+            entity = previewEntity(state = "on"),
+            onToggle = {},
+            onOpenDetail = {},
+            onTriggerNow = {},
+        )
+    }
+}
+
+@PreviewLightDark
+@Composable
+private fun AutomationEntityCardOffPreview() {
+    HAThemeForPreview {
+        AutomationEntityCard(
+            entity = previewEntity(state = "off"),
+            onToggle = {},
+            onOpenDetail = {},
+            onTriggerNow = {},
+        )
     }
 }

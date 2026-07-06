@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -24,16 +23,11 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -45,8 +39,6 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.media3.common.Player
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
@@ -130,26 +122,6 @@ internal fun WebViewContentScreen(
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
-                }
-
-                if (customViewFromWebView == null && !currentAppLocked) {
-                    // Use Popup so the FAB renders above the AndroidView-backed WebView
-                    Popup(
-                        alignment = Alignment.BottomEnd,
-                        properties = PopupProperties(focusable = false),
-                    ) {
-                        FloatingActionButton(
-                            onClick = onOverviewClicked,
-                            modifier = Modifier
-                                .navigationBarsPadding()
-                                .padding(16.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.GridView,
-                                contentDescription = stringResource(commonR.string.overview_title),
-                            )
-                        }
-                    }
                 }
             }
         }

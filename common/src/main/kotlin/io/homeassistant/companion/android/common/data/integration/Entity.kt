@@ -12,7 +12,9 @@ import com.mikepenz.iconics.typeface.library.community.material.CommunityMateria
 import io.homeassistant.companion.android.common.R as commonR
 import io.homeassistant.companion.android.common.data.integration.IntegrationDomains.CAMERA_DOMAIN
 import io.homeassistant.companion.android.common.data.integration.IntegrationDomains.CLIMATE_DOMAIN
+import io.homeassistant.companion.android.common.data.integration.IntegrationDomains.HUMIDIFIER_DOMAIN
 import io.homeassistant.companion.android.common.data.integration.IntegrationDomains.MEDIA_PLAYER_DOMAIN
+import io.homeassistant.companion.android.common.data.integration.IntegrationDomains.VACUUM_DOMAIN
 import io.homeassistant.companion.android.common.data.websocket.impl.entities.CompressedStateDiff
 import io.homeassistant.companion.android.common.data.websocket.impl.entities.EntityRegistryOptions
 import io.homeassistant.companion.android.common.util.LocalDateTimeSerializer
@@ -136,12 +138,24 @@ object EntityExt {
     const val TAG = "EntityExt"
 
     const val FAN_SUPPORT_SET_SPEED = 1
+    const val COVER_SUPPORT_SET_POSITION = 4
+    const val COVER_SUPPORT_STOP = 8
+    const val CLIMATE_SUPPORT_TARGET_TEMPERATURE = 1
+    const val CLIMATE_DEFAULT_MIN_TEMP = 7f
+    const val CLIMATE_DEFAULT_MAX_TEMP = 35f
     const val LIGHT_MODE_COLOR_TEMP = "color_temp"
     val LIGHT_MODE_NO_BRIGHTNESS_SUPPORT = listOf("unknown", "onoff")
     const val LIGHT_SUPPORT_BRIGHTNESS_DEPR = 1
     const val LIGHT_SUPPORT_COLOR_TEMP_DEPR = 2
     const val ALARM_CONTROL_PANEL_SUPPORT_ARM_AWAY = 2
     const val MEDIA_PLAYER_SUPPORT_VOLUME_SET = 4
+    const val MEDIA_PLAYER_SUPPORT_PREVIOUS_TRACK = 16
+    const val MEDIA_PLAYER_SUPPORT_NEXT_TRACK = 32
+    const val VACUUM_SUPPORT_TURN_ON = 1
+    const val HUMIDIFIER_DEFAULT_MIN_HUMIDITY = 0f
+    const val HUMIDIFIER_DEFAULT_MAX_HUMIDITY = 100f
+    const val HUMIDIFIER_HUMIDITY_STEP = 1f
+    const val HUMIDIFIER_SUPPORT_MODES = 8
 
     val DOMAINS_PRESS = listOf("button", "input_button")
     val DOMAINS_TOGGLE = listOf(
@@ -242,6 +256,28 @@ fun Entity.applyCompressedStateDiff(diff: CompressedStateDiff): Entity {
     }
 }
 
+fun Entity.supportsCoverSetPosition(): Boolean {
+    return try {
+        if (domain != "cover") return false
+        (attributes["supported_features"] as Number).toInt() and
+            EntityExt.COVER_SUPPORT_SET_POSITION == EntityExt.COVER_SUPPORT_SET_POSITION
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get supportsCoverSetPosition")
+        false
+    }
+}
+
+fun Entity.supportsCoverStop(): Boolean {
+    return try {
+        if (domain != "cover") return false
+        (attributes["supported_features"] as Number).toInt() and
+            EntityExt.COVER_SUPPORT_STOP == EntityExt.COVER_SUPPORT_STOP
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get supportsCoverStop")
+        false
+    }
+}
+
 fun Entity.getCoverPosition(): EntityPosition? {
     // https://github.com/home-assistant/frontend/blob/dev/src/dialogs/more-info/controls/more-info-cover.ts#L33
     return try {
@@ -326,6 +362,73 @@ fun Entity.getFanSteps(): Int? {
     } catch (e: Exception) {
         Timber.tag(EntityExt.TAG).e(e, "Unable to get getFanSteps")
         null
+    }
+}
+
+fun Entity.supportsClimateSetTemperature(): Boolean {
+    return try {
+        if (domain != CLIMATE_DOMAIN) return false
+        (attributes["supported_features"] as Number).toInt() and
+            EntityExt.CLIMATE_SUPPORT_TARGET_TEMPERATURE == EntityExt.CLIMATE_SUPPORT_TARGET_TEMPERATURE
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get supportsClimateSetTemperature")
+        false
+    }
+}
+
+fun Entity.getClimateTargetTemperature(): EntityPosition? {
+    // https://github.com/home-assistant/android/blob/main/app/src/main/kotlin/io/homeassistant/companion/android/controls/ClimateControl.kt
+    return try {
+        if (!supportsClimateSetTemperature()) return null
+
+        val minValue = (attributes["min_temp"] as? Number)?.toFloat() ?: EntityExt.CLIMATE_DEFAULT_MIN_TEMP
+        val maxValue = (attributes["max_temp"] as? Number)?.toFloat() ?: EntityExt.CLIMATE_DEFAULT_MAX_TEMP
+        val currentValue = (attributes["temperature"] as? Number)?.toFloat() ?: minValue
+
+        EntityPosition(
+            value = currentValue.coerceAtLeast(minValue).coerceAtMost(maxValue),
+            min = minValue,
+            max = maxValue,
+        )
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get getClimateTargetTemperature")
+        null
+    }
+}
+
+fun Entity.getClimateTemperatureStep(): Float {
+    return try {
+        (attributes["target_temp_step"] as? Number)?.toFloat() ?: when (attributes["temperature_unit"]) {
+            "°C" -> 0.5f
+            else -> 1f
+        }
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get getClimateTemperatureStep")
+        1f
+    }
+}
+
+fun Entity.getClimateCurrentTemperature(): Float? {
+    return try {
+        if (domain != CLIMATE_DOMAIN) return null
+        (attributes["current_temperature"] as? Number)?.toFloat()
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get getClimateCurrentTemperature")
+        null
+    }
+}
+
+/**
+ * The list of HVAC modes (e.g. `off`, `heat`, `cool`, `heat_cool`, `auto`, `dry`, `fan_only`) this
+ * climate entity can be set to. The entity's current mode is [Entity.state] itself.
+ */
+fun Entity.getClimateHvacModes(): List<String> {
+    return try {
+        if (domain != CLIMATE_DOMAIN) return emptyList()
+        (attributes["hvac_modes"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get getClimateHvacModes")
+        emptyList()
     }
 }
 
@@ -461,6 +564,109 @@ fun Entity.getVolumeStep(): Float {
     } catch (e: Exception) {
         Timber.tag(EntityExt.TAG).e(e, "Unable to get getVolumeStep")
         0.1f
+    }
+}
+
+fun Entity.supportsMediaPreviousTrack(): Boolean {
+    return try {
+        if (domain != MEDIA_PLAYER_DOMAIN) return false
+        (attributes["supported_features"] as Number).toInt() and
+            EntityExt.MEDIA_PLAYER_SUPPORT_PREVIOUS_TRACK == EntityExt.MEDIA_PLAYER_SUPPORT_PREVIOUS_TRACK
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get supportsMediaPreviousTrack")
+        false
+    }
+}
+
+fun Entity.supportsMediaNextTrack(): Boolean {
+    return try {
+        if (domain != MEDIA_PLAYER_DOMAIN) return false
+        (attributes["supported_features"] as Number).toInt() and
+            EntityExt.MEDIA_PLAYER_SUPPORT_NEXT_TRACK == EntityExt.MEDIA_PLAYER_SUPPORT_NEXT_TRACK
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get supportsMediaNextTrack")
+        false
+    }
+}
+
+/**
+ * Whether this vacuum entity supports the `turn_on`/`turn_off` services. Vacuums without this
+ * support only expose `start`/`return_to_base`, matching the branching already used by
+ * [io.homeassistant.companion.android.controls.VacuumControl].
+ */
+fun Entity.supportsVacuumTurnOn(): Boolean {
+    return try {
+        if (domain != VACUUM_DOMAIN) return false
+        (attributes["supported_features"] as Number).toInt() and
+            EntityExt.VACUUM_SUPPORT_TURN_ON == EntityExt.VACUUM_SUPPORT_TURN_ON
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get supportsVacuumTurnOn")
+        false
+    }
+}
+
+/**
+ * Returns the humidifier's target humidity as an [EntityPosition], or `null` if the entity
+ * doesn't currently expose a `humidity` attribute (e.g. the underlying device hasn't reported
+ * one yet). Unlike climate's target temperature, humidifier's target humidity isn't gated by a
+ * `supported_features` bit flag — every humidifier entity in Home Assistant core supports it.
+ */
+fun Entity.getHumidifierTargetHumidity(): EntityPosition? {
+    return try {
+        if (domain != HUMIDIFIER_DOMAIN) return null
+        val currentValue = (attributes["humidity"] as? Number)?.toFloat() ?: return null
+        val minValue = (attributes["min_humidity"] as? Number)?.toFloat() ?: EntityExt.HUMIDIFIER_DEFAULT_MIN_HUMIDITY
+        val maxValue = (attributes["max_humidity"] as? Number)?.toFloat() ?: EntityExt.HUMIDIFIER_DEFAULT_MAX_HUMIDITY
+
+        EntityPosition(
+            value = currentValue.coerceAtLeast(minValue).coerceAtMost(maxValue),
+            min = minValue,
+            max = maxValue,
+        )
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get getHumidifierTargetHumidity")
+        null
+    }
+}
+
+/** The step used when adjusting a humidifier's target humidity via +/- controls. */
+fun Entity.getHumidifierHumidityStep(): Float = EntityExt.HUMIDIFIER_HUMIDITY_STEP
+
+/**
+ * Whether this humidifier entity supports preset modes (e.g. auto/away/baby/boost/comfort),
+ * exposed through the `set_mode` service. Gated by the `MODES` bit of Home Assistant core's
+ * `HumidifierEntityFeature`.
+ */
+fun Entity.supportsHumidifierModes(): Boolean {
+    return try {
+        if (domain != HUMIDIFIER_DOMAIN) return false
+        (attributes["supported_features"] as Number).toInt() and
+            EntityExt.HUMIDIFIER_SUPPORT_MODES == EntityExt.HUMIDIFIER_SUPPORT_MODES
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get supportsHumidifierModes")
+        false
+    }
+}
+
+/** The list of preset modes this humidifier supports, or an empty list if none are reported. */
+fun Entity.getHumidifierModes(): List<String> {
+    return try {
+        if (!supportsHumidifierModes()) return emptyList()
+        (attributes["available_modes"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get getHumidifierModes")
+        emptyList()
+    }
+}
+
+/** The humidifier's currently active preset mode, or `null` if not reported. */
+fun Entity.getHumidifierMode(): String? {
+    return try {
+        if (!supportsHumidifierModes()) return null
+        attributes["mode"] as? String
+    } catch (e: Exception) {
+        Timber.tag(EntityExt.TAG).e(e, "Unable to get getHumidifierMode")
+        null
     }
 }
 

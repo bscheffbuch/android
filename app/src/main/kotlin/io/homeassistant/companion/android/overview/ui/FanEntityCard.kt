@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Lightbulb
+import androidx.compose.material.icons.rounded.Air
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
@@ -30,76 +30,74 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.homeassistant.companion.android.common.compose.theme.HAThemeForPreview
 import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import io.homeassistant.companion.android.common.data.integration.Entity
-import io.homeassistant.companion.android.common.data.integration.getLightBrightness
+import io.homeassistant.companion.android.common.data.integration.getFanSpeed
 import io.homeassistant.companion.android.common.data.integration.isActive
-import io.homeassistant.companion.android.common.data.integration.supportsLightBrightness
+import io.homeassistant.companion.android.common.data.integration.supportsFanSetSpeed
+import java.time.LocalDateTime
 import kotlin.math.abs
 import kotlinx.coroutines.withTimeoutOrNull
 
-// Ensures the brightness fill stays visible even when a light reports very low or zero
-// brightness while on, instead of disappearing to an imperceptible sliver
-private const val MINIMUM_BRIGHTNESS_FILL_FRACTION = 0.08f
+private const val FAN_ACTIVE_FILL_ALPHA = 0.28f
+private const val FAN_DIM_FILL_ALPHA = 0.10f
+
+// Ensures the speed fill stays visible even when a fan reports very low or zero speed while
+// on, instead of disappearing to an imperceptible sliver
+private const val MINIMUM_SPEED_FILL_FRACTION = 0.08f
 
 /**
- * A card representing a light entity.
+ * A card representing a fan entity.
  *
  * Gestures:
  * - Tap: toggle on/off
- * - Horizontal drag: adjust brightness live while sliding
+ * - Horizontal drag: adjust speed live while sliding (only when the fan supports `set_percentage`)
  * - Long press: open detail sheet
- *
- * @param accentColor Color of the "on" brightness fill. Defaults to the standard light accent;
- * pass a light group's accent color when rendering one of that group's member entities, so the
- * member visually reads as part of the group instead of a plain standalone light.
  */
 @Composable
-fun LightEntityCard(
+fun FanEntityCard(
     entity: Entity,
     onToggle: () -> Unit,
-    onBrightnessChange: (brightness: Float, immediate: Boolean) -> Unit,
+    onSpeedChange: (percentage: Float, immediate: Boolean) -> Unit,
     onOpenDetail: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    accentColor: Color = LocalHAColorScheme.current.colorFillLightLoudResting,
 ) {
     val colors = LocalHAColorScheme.current
     val haptic = LocalHapticFeedback.current
 
     val isOn = entity.isActive()
-    val entityBrightness = entity.getLightBrightness()?.value ?: if (isOn) 100f else 0f
-    var displayBrightness by remember(entity.entityId) { mutableFloatStateOf(entityBrightness) }
+    val supportsSpeed = entity.supportsFanSetSpeed()
+    val entitySpeed = entity.getFanSpeed()?.value ?: if (isOn) 100f else 0f
+    var displaySpeed by remember(entity.entityId) { mutableFloatStateOf(entitySpeed) }
     var isDragging by remember { mutableStateOf(false) }
 
-    LaunchedEffect(entityBrightness) {
-        if (!isDragging) displayBrightness = entityBrightness
+    LaunchedEffect(entitySpeed) {
+        if (!isDragging) displaySpeed = entitySpeed
     }
 
-    val animatedBrightness by animateFloatAsState(
-        targetValue = displayBrightness,
-        label = "brightness_fill",
-    )
+    val animatedSpeed by animateFloatAsState(targetValue = displaySpeed, label = "fan_speed_fill")
 
     val friendlyName = entity.attributes["friendly_name"]?.toString() ?: entity.entityId
-    val cardBg = if (isOn) colors.colorFillNeutralLoudResting else colors.colorSurfaceLow
-    val textColor = if (isOn) colors.colorOnLightLoud else colors.colorTextSecondary
+    val cardBg = if (isOn) colors.colorFillNeutralQuietResting else colors.colorSurfaceLow
+    val textColor = if (isOn) colors.colorTextPrimary else colors.colorTextSecondary
     val gestureModifier = if (enabled) {
         Modifier.pointerInput(entity.entityId) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 var dragStarted = false
                 val startX = down.position.x
-                val brightnessAtGestureStart = displayBrightness
+                val speedAtGestureStart = displaySpeed
 
                 val result = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                     var active = true
@@ -144,16 +142,16 @@ fun LightEntityCard(
                             if (!change.pressed) {
                                 active = false
                                 isDragging = false
-                                if (entity.supportsLightBrightness()) {
-                                    onBrightnessChange(displayBrightness, true)
+                                if (supportsSpeed) {
+                                    onSpeedChange(displaySpeed, true)
                                 }
                             } else {
                                 val dx = change.position.x - startX
-                                if (entity.supportsLightBrightness()) {
+                                if (supportsSpeed) {
                                     change.consume()
-                                    displayBrightness = (brightnessAtGestureStart + dx / size.width.toFloat() * 100f)
+                                    displaySpeed = (speedAtGestureStart + dx / size.width.toFloat() * 100f)
                                         .coerceIn(0f, 100f)
-                                    onBrightnessChange(displayBrightness, false)
+                                    onSpeedChange(displaySpeed, false)
                                 }
                             }
                         }
@@ -177,16 +175,16 @@ fun LightEntityCard(
             modifier = Modifier
                 .fillMaxSize()
                 .drawBehind {
-                    if (isOn || animatedBrightness > 0f) {
-                        if (entity.supportsLightBrightness()) {
-                            val fillFraction = (animatedBrightness / 100f).coerceIn(0f, 1f)
-                                .let { if (isOn) it.coerceAtLeast(MINIMUM_BRIGHTNESS_FILL_FRACTION) else it }
+                    if (isOn || animatedSpeed > 0f) {
+                        if (supportsSpeed) {
+                            val fillFraction = (animatedSpeed / 100f).coerceIn(0f, 1f)
+                                .let { if (isOn) it.coerceAtLeast(MINIMUM_SPEED_FILL_FRACTION) else it }
                             drawRect(
-                                color = accentColor,
+                                color = colors.colorFillPrimaryLoudResting.copy(alpha = FAN_ACTIVE_FILL_ALPHA),
                                 size = Size(width = size.width * fillFraction, height = size.height),
                             )
                         } else {
-                            drawRect(color = accentColor)
+                            drawRect(color = colors.colorFillPrimaryLoudResting.copy(alpha = FAN_DIM_FILL_ALPHA))
                         }
                     }
                 },
@@ -194,14 +192,14 @@ fun LightEntityCard(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Lightbulb,
+                    imageVector = Icons.Rounded.Air,
                     contentDescription = null,
-                    tint = if (isOn) colors.colorOnLightLoud else colors.colorTextDisabled,
-                    modifier = Modifier.size(24.dp),
+                    tint = if (isOn) colors.colorFillPrimaryLoudResting else colors.colorTextDisabled,
+                    modifier = Modifier.size(28.dp),
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -214,18 +212,57 @@ fun LightEntityCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = if (isOn && entity.supportsLightBrightness()) {
-                            "${animatedBrightness.toInt()}%"
-                        } else if (isOn) {
-                            "On"
+                        text = if (isOn && supportsSpeed) {
+                            "${animatedSpeed.toInt()}%"
                         } else {
-                            "Off"
+                            entity.state.replaceFirstChar { it.uppercaseChar() }
                         },
-                        color = textColor,
-                        fontSize = 16.sp,
+                        color = colors.colorTextSecondary,
+                        fontSize = 12.sp,
                     )
                 }
             }
         }
+    }
+}
+
+private fun previewEntity(state: String, percentage: Int? = null) = Entity(
+    entityId = "fan.living_room",
+    state = state,
+    attributes = buildMap {
+        put("friendly_name", "Living room fan")
+        if (percentage != null) {
+            put("percentage", percentage)
+            put("percentage_step", 100.0 / 3)
+            put("supported_features", 1)
+        }
+    },
+    lastChanged = LocalDateTime.now(),
+    lastUpdated = LocalDateTime.now(),
+)
+
+@PreviewLightDark
+@Composable
+private fun FanEntityCardOnPreview() {
+    HAThemeForPreview {
+        FanEntityCard(
+            entity = previewEntity(state = "on", percentage = 66),
+            onToggle = {},
+            onSpeedChange = { _, _ -> },
+            onOpenDetail = {},
+        )
+    }
+}
+
+@PreviewLightDark
+@Composable
+private fun FanEntityCardOffPreview() {
+    HAThemeForPreview {
+        FanEntityCard(
+            entity = previewEntity(state = "off"),
+            onToggle = {},
+            onSpeedChange = { _, _ -> },
+            onOpenDetail = {},
+        )
     }
 }

@@ -15,6 +15,7 @@ import io.homeassistant.companion.android.database.server.ServerUserInfo
 import io.homeassistant.companion.android.frontend.navigation.FrontendRoute
 import io.homeassistant.companion.android.onboarding.OnboardingRoute
 import io.homeassistant.companion.android.onboarding.WearOnboardingRoute
+import io.homeassistant.companion.android.overview.navigation.OverviewLandingRoute
 import io.homeassistant.companion.android.testing.unit.ConsoleLogExtension
 import io.homeassistant.companion.android.testing.unit.MainDispatcherJUnit5Extension
 import io.mockk.coEvery
@@ -54,6 +55,7 @@ class LaunchViewModelTest {
         hasLocationTrackingSupport: Boolean = false,
         isAutomotive: Boolean = false,
         isFullFlavor: Boolean = true,
+        useNativeOverviewLanding: Boolean = false,
     ) {
         viewModel = LaunchViewModel(
             initialDeepLink,
@@ -64,6 +66,7 @@ class LaunchViewModelTest {
             hasLocationTrackingSupport,
             isAutomotive,
             isFullFlavor,
+            useNativeOverviewLanding,
         )
     }
 
@@ -581,5 +584,184 @@ class LaunchViewModelTest {
         advanceUntilIdle()
 
         assertTrue(viewModel.isFullScreen.value)
+    }
+
+    @Test
+    fun `Given native overview landing enabled and no initial deep link, when network is READY, then navigate to overview landing route`() = runTest {
+        val server = mockk<Server>(relaxed = true)
+
+        every { workManager.enqueue(any<OneTimeWorkRequest>()) } returns mockk()
+
+        coEvery { serverManager.getServer(ServerManager.SERVER_ID_ACTIVE) } returns server
+        coEvery { serverManager.isRegistered() } returns true
+        coEvery { serverManager.authenticationRepository().getSessionState() } returns SessionState.CONNECTED
+        val networkStateFlow = MutableStateFlow(NetworkState.READY_NET_VALIDATED)
+        coEvery { networkStatusMonitor.observeNetworkStatus(any()) } returns networkStateFlow
+
+        createViewModel(useNativeOverviewLanding = true)
+        advanceUntilIdle()
+
+        assertEquals(
+            LaunchUiState.Ready(OverviewLandingRoute),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
+    fun `Given native overview landing enabled and initial deep link is NavigateTo with null path, when server is connected, then still navigate to frontend without path`() = runTest {
+        val serverId = 5
+        val server = mockk<Server>(relaxed = true)
+        every { workManager.enqueue(any<OneTimeWorkRequest>()) } returns mockk()
+
+        coEvery { serverManager.getServer(serverId) } returns server
+        coEvery { serverManager.isRegistered() } returns true
+        coEvery { serverManager.authenticationRepository().getSessionState() } returns SessionState.CONNECTED
+        val networkStateFlow = MutableStateFlow(NetworkState.READY_NET_VALIDATED)
+        coEvery { networkStatusMonitor.observeNetworkStatus(any()) } returns networkStateFlow
+
+        createViewModel(
+            initialDeepLink = LaunchActivity.DeepLink.NavigateTo(path = null, serverId = serverId),
+            useNativeOverviewLanding = true,
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            LaunchUiState.Ready(FrontendRoute(null, serverId)),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
+    fun `Given native overview landing enabled and initial deep link is NavigateTo with a path, when server is connected, then still navigate to frontend with that path`() = runTest {
+        val serverId = 42
+        val server = mockk<Server>(relaxed = true)
+        every { workManager.enqueue(any<OneTimeWorkRequest>()) } returns mockk()
+
+        coEvery { serverManager.getServer(serverId) } returns server
+        coEvery { serverManager.isRegistered() } returns true
+        coEvery { serverManager.authenticationRepository().getSessionState() } returns SessionState.CONNECTED
+        val networkStateFlow = MutableStateFlow(NetworkState.READY_NET_VALIDATED)
+        coEvery { networkStatusMonitor.observeNetworkStatus(any()) } returns networkStateFlow
+
+        createViewModel(
+            initialDeepLink = LaunchActivity.DeepLink.NavigateTo("/lovelace", serverId),
+            useNativeOverviewLanding = true,
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            LaunchUiState.Ready(FrontendRoute("/lovelace", serverId)),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
+    fun `Given native overview landing enabled and initial deep link is OpenOnboarding, when creating viewModel, then still navigate to onboarding`() = runTest {
+        createViewModel(
+            initialDeepLink = LaunchActivity.DeepLink.OpenOnboarding(
+                urlToOnboard = "http://homeassistant.io",
+                hideExistingServers = false,
+                skipWelcome = false,
+            ),
+            useNativeOverviewLanding = true,
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            LaunchUiState.Ready(
+                OnboardingRoute(
+                    hasLocationTracking = false,
+                    urlToOnboard = "http://homeassistant.io",
+                    hideExistingServers = false,
+                    skipWelcome = false,
+                ),
+            ),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
+    fun `Given native overview landing enabled and initial deep link is OpenWearOnboarding, when full flavor, then still navigate to wear onboarding`() = runTest {
+        createViewModel(
+            initialDeepLink = LaunchActivity.DeepLink.OpenWearOnboarding("ha_wear", "http://ha"),
+            hasLocationTrackingSupport = true,
+            useNativeOverviewLanding = true,
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            LaunchUiState.Ready(WearOnboardingRoute("ha_wear", "http://ha")),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
+    fun `Given native overview landing enabled and isAutomotive is true, when network is READY, then still navigate to automotive route`() = runTest {
+        val server = mockk<Server>(relaxed = true)
+
+        every { workManager.enqueue(any<OneTimeWorkRequest>()) } returns mockk()
+
+        coEvery { serverManager.getServer(ServerManager.SERVER_ID_ACTIVE) } returns server
+        coEvery { serverManager.isRegistered() } returns true
+        coEvery { serverManager.authenticationRepository().getSessionState() } returns SessionState.CONNECTED
+        val networkStateFlow = MutableStateFlow(NetworkState.READY_NET_VALIDATED)
+        coEvery { networkStatusMonitor.observeNetworkStatus(any()) } returns networkStateFlow
+
+        createViewModel(isAutomotive = true, useNativeOverviewLanding = true)
+        advanceUntilIdle()
+
+        assertEquals(
+            LaunchUiState.Ready(AutomotiveRoute),
+            viewModel.uiState.value,
+        )
+    }
+
+    @Test
+    fun `Given native overview landing enabled and network is UNAVAILABLE then READY, when observing network, then navigate to overview landing route after recovery`() = runTest {
+        val server = mockk<Server>(relaxed = true)
+
+        every { workManager.enqueue(any<OneTimeWorkRequest>()) } returns mockk()
+
+        coEvery { serverManager.getServer(ServerManager.SERVER_ID_ACTIVE) } returns server
+        coEvery { serverManager.isRegistered() } returns true
+        coEvery { serverManager.authenticationRepository().getSessionState() } returns SessionState.CONNECTED
+        val networkStateFlow = MutableStateFlow(NetworkState.UNAVAILABLE)
+        coEvery { networkStatusMonitor.observeNetworkStatus(any()) } returns networkStateFlow
+
+        createViewModel(useNativeOverviewLanding = true)
+        advanceUntilIdle()
+
+        assertEquals(LaunchUiState.NetworkUnavailable, viewModel.uiState.value)
+        assertEquals(1, networkStateFlow.subscriptionCount.value)
+
+        networkStateFlow.emit(NetworkState.READY_INTERNAL)
+        advanceUntilIdle()
+
+        assertEquals(
+            LaunchUiState.Ready(OverviewLandingRoute),
+            viewModel.uiState.value,
+        )
+        assertEquals(0, networkStateFlow.subscriptionCount.value)
+    }
+
+    @Test
+    fun `Given native overview landing disabled and no initial deep link, when network is READY, then navigate to frontend route`() = runTest {
+        val server = mockk<Server>(relaxed = true)
+
+        every { workManager.enqueue(any<OneTimeWorkRequest>()) } returns mockk()
+
+        coEvery { serverManager.getServer(ServerManager.SERVER_ID_ACTIVE) } returns server
+        coEvery { serverManager.isRegistered() } returns true
+        coEvery { serverManager.authenticationRepository().getSessionState() } returns SessionState.CONNECTED
+        val networkStateFlow = MutableStateFlow(NetworkState.READY_NET_VALIDATED)
+        coEvery { networkStatusMonitor.observeNetworkStatus(any()) } returns networkStateFlow
+
+        createViewModel(useNativeOverviewLanding = false)
+        advanceUntilIdle()
+
+        assertEquals(
+            LaunchUiState.Ready(FrontendRoute(null, ServerManager.SERVER_ID_ACTIVE)),
+            viewModel.uiState.value,
+        )
     }
 }

@@ -328,7 +328,7 @@
             android:exported="true"
             android:resizeableActivity="true"
             android:taskAffinity="io.homeassistant.companion.android.controls"
-            android:enabled="false" />
+            android:enabled="true" />
 
         <receiver
             android:name=".sensors.LocationSensorManager"

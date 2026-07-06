@@ -276,6 +276,9 @@ class HAColorScheme(
     val colorOnDisabledNormal: Color,
     val colorOnDisabledQuiet: Color,
 
+    val colorFillLightLoudResting: Color,
+    val colorOnLightLoud: Color,
+
     val colorSurfaceDefault: Color,
     val colorSurfaceLow: Color,
 
@@ -357,7 +360,10 @@ val DarkHAColorScheme = HAColorScheme(
     colorOnDisabledNormal = HAColors.Neutral60,
     colorOnDisabledQuiet = HAColors.Neutral40,
 
-    colorSurfaceDefault = HAColors.Neutral10,
+    colorFillLightLoudResting = HAColors.Yellow50,
+    colorOnLightLoud = HAColors.White,
+
+    colorSurfaceDefault = HAColors.Black,
     colorSurfaceLow = HAColors.Neutral05,
 
     colorTextPrimary = HAColors.White,
@@ -436,6 +442,9 @@ val LightHAColorScheme = HAColorScheme(
     colorOnDisabledLoud = HAColors.Neutral95,
     colorOnDisabledNormal = HAColors.Neutral70,
     colorOnDisabledQuiet = HAColors.Neutral80,
+
+    colorFillLightLoudResting = HAColors.Yellow50,
+    colorOnLightLoud = HAColors.White,
 
     colorSurfaceDefault = HAColors.White,
     colorSurfaceLow = HAColors.Neutral95,

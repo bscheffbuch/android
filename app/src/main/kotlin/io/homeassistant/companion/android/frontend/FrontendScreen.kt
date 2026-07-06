@@ -21,10 +21,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.homeassistant.companion.android.common.R as commonR
@@ -62,6 +68,8 @@ import io.homeassistant.companion.android.loading.LoadingScreen
 import io.homeassistant.companion.android.onboarding.locationforsecureconnection.LocationForSecureConnectionScreen
 import io.homeassistant.companion.android.onboarding.locationforsecureconnection.LocationForSecureConnectionViewModel
 import io.homeassistant.companion.android.onboarding.locationforsecureconnection.LocationForSecureConnectionViewModelFactory
+import io.homeassistant.companion.android.overview.OverviewViewModel
+import io.homeassistant.companion.android.overview.ui.OverviewScreen
 import io.homeassistant.companion.android.util.OnSwipeListener
 import io.homeassistant.companion.android.util.compose.HAPreviews
 import io.homeassistant.companion.android.util.compose.webview.HAWebView
@@ -108,6 +116,7 @@ internal fun FrontendScreen(
     val pendingPermissionRequest by viewModel.pendingPermissionRequest.collectAsStateWithLifecycle()
     val pendingDialog by viewModel.pendingDialog.collectAsStateWithLifecycle()
     val pendingFileChooser by viewModel.pendingFileChooser.collectAsStateWithLifecycle()
+    var showNativeOverview by remember { mutableStateOf(false) }
 
     // Create SecurityLevel ViewModel only when needed
     val securityLevelViewModel: LocationForSecureConnectionViewModel? =
@@ -119,33 +128,75 @@ internal fun FrontendScreen(
             null
         }
 
-    FrontendScreenContent(
-        onBackClick = onBackClick,
-        viewState = viewState,
-        errorStateProvider = viewModel as FrontendConnectionErrorStateProvider,
-        webViewClient = viewModel.webViewClient,
-        webChromeClient = viewModel.webChromeClient,
-        frontendJsCallback = viewModel.frontendJsCallback,
-        pendingPermissionRequest = pendingPermissionRequest,
-        pendingDialog = pendingDialog,
-        pendingFileChooser = pendingFileChooser,
-        onBlockInsecureRetry = viewModel::onRetry,
-        onOpenExternalLink = onOpenExternalLink,
-        onBlockInsecureHelpClick = onBlockInsecureHelpClick,
-        onOpenSettings = onOpenSettings,
-        onChangeSecurityLevel = viewModel::onShowSecurityLevelScreen,
-        onOpenLocationSettings = onOpenLocationSettings,
-        onConfigureHomeNetwork = onConfigureHomeNetwork,
-        securityLevelViewModel = securityLevelViewModel,
-        onSecurityLevelDone = viewModel::onSecurityLevelDone,
-        onSecurityLevelHelpClick = onSecurityLevelHelpClick,
-        onShowSnackbar = onShowSnackbar,
-        onWebViewCreationFailed = viewModel::onWebViewCreationFailed,
-        onDownloadRequested = viewModel::onDownloadRequested,
-        webViewActions = viewModel.webViewActions,
-        onGesture = viewModel::onGesture,
-        modifier = modifier,
-    )
+    Box(modifier = modifier.fillMaxSize()) {
+        FrontendScreenContent(
+            onBackClick = onBackClick,
+            viewState = viewState,
+            errorStateProvider = viewModel as FrontendConnectionErrorStateProvider,
+            webViewClient = viewModel.webViewClient,
+            webChromeClient = viewModel.webChromeClient,
+            frontendJsCallback = viewModel.frontendJsCallback,
+            pendingPermissionRequest = pendingPermissionRequest,
+            pendingDialog = pendingDialog,
+            pendingFileChooser = pendingFileChooser,
+            onBlockInsecureRetry = viewModel::onRetry,
+            onOpenExternalLink = onOpenExternalLink,
+            onBlockInsecureHelpClick = onBlockInsecureHelpClick,
+            onOpenSettings = onOpenSettings,
+            onChangeSecurityLevel = viewModel::onShowSecurityLevelScreen,
+            onOpenLocationSettings = onOpenLocationSettings,
+            onConfigureHomeNetwork = onConfigureHomeNetwork,
+            securityLevelViewModel = securityLevelViewModel,
+            onSecurityLevelDone = viewModel::onSecurityLevelDone,
+            onSecurityLevelHelpClick = onSecurityLevelHelpClick,
+            onShowSnackbar = onShowSnackbar,
+            onWebViewCreationFailed = viewModel::onWebViewCreationFailed,
+            onDownloadRequested = viewModel::onDownloadRequested,
+            webViewActions = viewModel.webViewActions,
+            onGesture = viewModel::onGesture,
+            onOverviewClick = { showNativeOverview = true },
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        if (showNativeOverview) {
+            val overviewViewModel: OverviewViewModel = hiltViewModel()
+            val overviewUiState by overviewViewModel.uiState.collectAsStateWithLifecycle()
+            OverviewScreen(
+                uiState = overviewUiState,
+                onRefresh = { overviewViewModel.loadEntities() },
+                onToggleEntity = overviewViewModel::toggleEntity,
+                onToggleLightGroup = overviewViewModel::toggleLightGroup,
+                onBrightnessChange = overviewViewModel::setBrightness,
+                onGroupBrightnessChange = overviewViewModel::setGroupBrightness,
+                onColorChange = overviewViewModel::setLightColor,
+                onGroupColorChange = overviewViewModel::setGroupColor,
+                onColorTemperatureChange = overviewViewModel::setLightColorTemperature,
+                onGroupColorTemperatureChange = overviewViewModel::setGroupColorTemperature,
+                onEditModeChange = overviewViewModel::setEditMode,
+                onSaveLightGroup = overviewViewModel::saveLightGroup,
+                onDeleteLightGroup = overviewViewModel::deleteLightGroup,
+                onMoveItem = overviewViewModel::moveItem,
+                onItemDrop = overviewViewModel::handleItemDrop,
+                onRemoveEntityFromGroup = overviewViewModel::removeLightFromGroup,
+                onGroupExpandedChange = overviewViewModel::setLightGroupExpanded,
+                onSetDisplayedAsLight = overviewViewModel::setDisplayedAsLight,
+                onTriggerAutomation = overviewViewModel::triggerAutomation,
+                onSetFanSpeed = overviewViewModel::setFanSpeed,
+                onSetCoverPosition = overviewViewModel::setCoverPosition,
+                onStopCover = overviewViewModel::stopCover,
+                onCycleClimateHvacMode = overviewViewModel::cycleClimateHvacMode,
+                onSetClimateTemperature = overviewViewModel::setClimateTemperature,
+                onTogglePlayback = overviewViewModel::toggleMediaPlayback,
+                onSetMediaVolume = overviewViewModel::setMediaVolume,
+                onSkipToPreviousTrack = overviewViewModel::skipToPreviousTrack,
+                onSkipToNextTrack = overviewViewModel::skipToNextTrack,
+                onSetHumidifierHumidity = overviewViewModel::setHumidifierHumidity,
+                onCycleHumidifierMode = overviewViewModel::cycleHumidifierMode,
+                onClose = { showNativeOverview = false },
+                errorEvents = overviewViewModel.errorEvents,
+            )
+        }
+    }
 }
 
 @Composable
@@ -175,6 +226,7 @@ internal fun FrontendScreenContent(
     onDownloadRequested: (url: String, contentDisposition: String, mimetype: String) -> Unit = { _, _, _ -> },
     webViewActions: Flow<WebViewAction> = emptyFlow(),
     onGesture: (GestureDirection, Int) -> Unit = { _, _ -> },
+    onOverviewClick: () -> Unit = {},
 ) {
     var webView by remember { mutableStateOf<WebView?>(null) }
 
@@ -225,6 +277,23 @@ internal fun FrontendScreenContent(
             onOpenExternalLink = onOpenExternalLink,
             onShowSnackbar = onShowSnackbar,
         )
+
+        // Native overview FAB — shown above WebView when the dashboard is actively loaded.
+        // Tap opens the Google Home-style entity overview.
+        if (viewState is FrontendViewState.Content) {
+            FloatingActionButton(
+                onClick = onOverviewClick,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = 16.dp, bottom = 16.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.GridView,
+                    contentDescription = stringResource(commonR.string.overview_title),
+                )
+            }
+        }
     }
 }
 

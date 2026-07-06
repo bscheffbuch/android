@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
+import io.homeassistant.companion.android.automations.navigation.automationsScreen
 import io.homeassistant.companion.android.automotive.navigation.carAppActivity
 import io.homeassistant.companion.android.automotive.navigation.navigateToCarAppActivity
 import io.homeassistant.companion.android.common.util.DisabledLocationHandler
@@ -27,6 +28,7 @@ import io.homeassistant.companion.android.onboarding.onboarding
 import io.homeassistant.companion.android.onboarding.sethomenetwork.navigation.navigateToSetHomeNetworkRoute
 import io.homeassistant.companion.android.onboarding.sethomenetwork.navigation.setHomeNetworkScreen
 import io.homeassistant.companion.android.onboarding.wearOnboarding
+import io.homeassistant.companion.android.overview.navigation.overviewLandingScreen
 import io.homeassistant.companion.android.settings.navigation.navigateToSettings
 import io.homeassistant.companion.android.settings.server.ServerChooserFragment
 
@@ -130,6 +132,8 @@ internal fun HANavHost(
                     navController.navigateToUri(URL_SECURITY_LEVEL_DOCUMENTATION, onShowSnackbar)
                 },
             )
+            automationsScreen(navController)
+            overviewLandingScreen(navController = navController)
 
             if (isAutomotive) {
                 carAppActivity(navController)

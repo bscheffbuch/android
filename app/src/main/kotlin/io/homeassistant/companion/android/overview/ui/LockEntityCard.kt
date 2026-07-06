@@ -19,28 +19,34 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.homeassistant.companion.android.common.compose.theme.HAThemeForPreview
 import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import io.homeassistant.companion.android.common.data.integration.Entity
-import io.homeassistant.companion.android.common.data.integration.isActive
+import java.time.LocalDateTime
 
 private val OnStateBorderWidth = 2.dp
+private const val LOCK_STATE_LOCKED = "locked"
+private const val LOCK_STATE_JAMMED = "jammed"
 
 /**
- * A generic card for non-light entities.
+ * A card for lock entities. Unlike the generic on/off treatment, a `jammed` lock is called out
+ * with a distinct warning style instead of silently looking identical to a plain unlocked lock.
  *
  * Gestures:
- * - Tap: toggle on/off
+ * - Tap: toggle locked/unlocked
  * - Long press: open detail sheet
  */
 @Composable
-fun GenericEntityCard(
+fun LockEntityCard(
     entity: Entity,
     onToggle: () -> Unit,
     onOpenDetail: () -> Unit,
@@ -49,12 +55,34 @@ fun GenericEntityCard(
 ) {
     val colors = LocalHAColorScheme.current
     val haptic = LocalHapticFeedback.current
-    val isOn = entity.isActive()
+    val isLocked = entity.state == LOCK_STATE_LOCKED
+    val isJammed = entity.state == LOCK_STATE_JAMMED
     val friendlyName = entity.attributes["friendly_name"]?.toString() ?: entity.entityId
 
-    val cardBg = if (isOn) colors.colorFillPrimaryQuietResting else colors.colorSurfaceLow
-    val iconTint = if (isOn) colors.colorOnPrimaryNormal else colors.colorTextDisabled
-    val textColor = if (isOn) colors.colorTextPrimary else colors.colorTextSecondary
+    val cardBg: Color
+    val iconTint: Color
+    val textColor: Color
+    val borderColor: Color?
+    when {
+        isJammed -> {
+            cardBg = colors.colorFillWarningQuietResting
+            iconTint = colors.colorOnWarningNormal
+            textColor = colors.colorTextPrimary
+            borderColor = colors.colorBorderWarningNormal
+        }
+        isLocked -> {
+            cardBg = colors.colorFillPrimaryQuietResting
+            iconTint = colors.colorOnPrimaryNormal
+            textColor = colors.colorTextPrimary
+            borderColor = colors.colorBorderPrimaryLoud
+        }
+        else -> {
+            cardBg = colors.colorSurfaceLow
+            iconTint = colors.colorTextDisabled
+            textColor = colors.colorTextSecondary
+            borderColor = null
+        }
+    }
     val cardShape = OverviewCardShape
     val gestureModifier = if (enabled) {
         Modifier.pointerInput(entity.entityId) {
@@ -76,8 +104,8 @@ fun GenericEntityCard(
             .height(100.dp)
             .then(gestureModifier)
             .then(
-                if (isOn) {
-                    Modifier.border(OnStateBorderWidth, colors.colorBorderPrimaryLoud, cardShape)
+                if (borderColor != null) {
+                    Modifier.border(OnStateBorderWidth, borderColor, cardShape)
                 } else {
                     Modifier
                 },
@@ -93,7 +121,7 @@ fun GenericEntityCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = EntityIconProvider.iconForDomain(entity.domain, isOn),
+                    imageVector = EntityIconProvider.iconForDomain(entity.domain, isLocked),
                     contentDescription = null,
                     tint = iconTint,
                     modifier = Modifier.size(28.dp),
@@ -110,7 +138,7 @@ fun GenericEntityCard(
                     )
                     Text(
                         text = entity.state.replaceFirstChar { it.uppercaseChar() },
-                        color = colors.colorTextSecondary,
+                        color = if (isJammed) colors.colorOnWarningNormal else colors.colorTextSecondary,
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -118,5 +146,49 @@ fun GenericEntityCard(
                 }
             }
         }
+    }
+}
+
+private fun previewEntity(state: String) = Entity(
+    entityId = "lock.front_door",
+    state = state,
+    attributes = mapOf("friendly_name" to "Front door"),
+    lastChanged = LocalDateTime.now(),
+    lastUpdated = LocalDateTime.now(),
+)
+
+@PreviewLightDark
+@Composable
+private fun LockEntityCardLockedPreview() {
+    HAThemeForPreview {
+        LockEntityCard(
+            entity = previewEntity(state = "locked"),
+            onToggle = {},
+            onOpenDetail = {},
+        )
+    }
+}
+
+@PreviewLightDark
+@Composable
+private fun LockEntityCardUnlockedPreview() {
+    HAThemeForPreview {
+        LockEntityCard(
+            entity = previewEntity(state = "unlocked"),
+            onToggle = {},
+            onOpenDetail = {},
+        )
+    }
+}
+
+@PreviewLightDark
+@Composable
+private fun LockEntityCardJammedPreview() {
+    HAThemeForPreview {
+        LockEntityCard(
+            entity = previewEntity(state = "jammed"),
+            onToggle = {},
+            onOpenDetail = {},
+        )
     }
 }

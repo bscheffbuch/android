@@ -1,6 +1,7 @@
 package io.homeassistant.companion.android.overview.ui
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -13,7 +14,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -34,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,28 +49,20 @@ import io.homeassistant.companion.android.common.data.integration.Entity
 import io.homeassistant.companion.android.common.data.integration.getLightBrightness
 import io.homeassistant.companion.android.common.data.integration.isActive
 import io.homeassistant.companion.android.common.data.integration.supportsLightBrightness
+import io.homeassistant.companion.android.overview.OverviewLightGroup
 import kotlin.math.abs
 import kotlinx.coroutines.withTimeoutOrNull
 
-// Ensures the brightness fill stays visible even when a light reports very low or zero
-// brightness while on, instead of disappearing to an imperceptible sliver
+// Ensures the brightness fill stays visible even when the group reports very low or zero
+// average brightness while on, instead of disappearing to an imperceptible sliver
 private const val MINIMUM_BRIGHTNESS_FILL_FRACTION = 0.08f
 
-/**
- * A card representing a light entity.
- *
- * Gestures:
- * - Tap: toggle on/off
- * - Horizontal drag: adjust brightness live while sliding
- * - Long press: open detail sheet
- *
- * @param accentColor Color of the "on" brightness fill. Defaults to the standard light accent;
- * pass a light group's accent color when rendering one of that group's member entities, so the
- * member visually reads as part of the group instead of a plain standalone light.
- */
 @Composable
-fun LightEntityCard(
-    entity: Entity,
+fun LightGroupCard(
+    group: OverviewLightGroup,
+    entities: List<Entity>,
+    isExpanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     onToggle: () -> Unit,
     onBrightnessChange: (brightness: Float, immediate: Boolean) -> Unit,
     onOpenDetail: () -> Unit,
@@ -75,10 +72,16 @@ fun LightEntityCard(
 ) {
     val colors = LocalHAColorScheme.current
     val haptic = LocalHapticFeedback.current
-
-    val isOn = entity.isActive()
-    val entityBrightness = entity.getLightBrightness()?.value ?: if (isOn) 100f else 0f
-    var displayBrightness by remember(entity.entityId) { mutableFloatStateOf(entityBrightness) }
+    val expandHitWidthPx = with(LocalDensity.current) { 56.dp.toPx() }
+    val isOn = entities.any { it.isActive() }
+    val supportsBrightness = entities.any { it.supportsLightBrightness() }
+    val entityBrightness = entities
+        .mapNotNull { it.getLightBrightness()?.value }
+        .takeIf { it.isNotEmpty() }
+        ?.average()
+        ?.toFloat()
+        ?: if (isOn) 100f else 0f
+    var displayBrightness by remember(group.id) { mutableFloatStateOf(entityBrightness) }
     var isDragging by remember { mutableStateOf(false) }
 
     LaunchedEffect(entityBrightness) {
@@ -87,19 +90,26 @@ fun LightEntityCard(
 
     val animatedBrightness by animateFloatAsState(
         targetValue = displayBrightness,
-        label = "brightness_fill",
+        label = "group_brightness_fill",
     )
-
-    val friendlyName = entity.attributes["friendly_name"]?.toString() ?: entity.entityId
-    val cardBg = if (isOn) colors.colorFillNeutralLoudResting else colors.colorSurfaceLow
-    val textColor = if (isOn) colors.colorOnLightLoud else colors.colorTextSecondary
     val gestureModifier = if (enabled) {
-        Modifier.pointerInput(entity.entityId) {
+        Modifier.pointerInput(group.id, isExpanded) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
-                var dragStarted = false
+                if (down.position.x >= size.width - expandHitWidthPx) {
+                    down.consume()
+                    onExpandedChange(!isExpanded)
+                    var waiting = true
+                    while (waiting) {
+                        val event = awaitPointerEvent(PointerEventPass.Main)
+                        event.changes.forEach { it.consume() }
+                        if (event.changes.all { !it.pressed }) waiting = false
+                    }
+                    return@awaitEachGesture
+                }
                 val startX = down.position.x
                 val brightnessAtGestureStart = displayBrightness
+                var dragStarted = false
 
                 val result = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                     var active = true
@@ -126,14 +136,12 @@ fun LightEntityCard(
                         onOpenDetail()
                         var waiting = true
                         while (waiting) {
-                            val e = awaitPointerEvent(PointerEventPass.Main)
-                            if (e.changes.all { !it.pressed }) waiting = false
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            if (event.changes.all { !it.pressed }) waiting = false
                         }
                     }
 
-                    result == false -> {
-                        onToggle()
-                    }
+                    result == false -> onToggle()
 
                     else -> {
                         isDragging = true
@@ -144,17 +152,13 @@ fun LightEntityCard(
                             if (!change.pressed) {
                                 active = false
                                 isDragging = false
-                                if (entity.supportsLightBrightness()) {
-                                    onBrightnessChange(displayBrightness, true)
-                                }
-                            } else {
+                                if (supportsBrightness) onBrightnessChange(displayBrightness, true)
+                            } else if (supportsBrightness) {
+                                change.consume()
                                 val dx = change.position.x - startX
-                                if (entity.supportsLightBrightness()) {
-                                    change.consume()
-                                    displayBrightness = (brightnessAtGestureStart + dx / size.width.toFloat() * 100f)
-                                        .coerceIn(0f, 100f)
-                                    onBrightnessChange(displayBrightness, false)
-                                }
+                                displayBrightness = (brightnessAtGestureStart + dx / size.width.toFloat() * 100f)
+                                    .coerceIn(0f, 100f)
+                                onBrightnessChange(displayBrightness, false)
                             }
                         }
                     }
@@ -171,23 +175,21 @@ fun LightEntityCard(
             .height(100.dp)
             .then(gestureModifier),
         shape = OverviewCardShape,
-        colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (isOn) colors.colorFillNeutralLoudResting else colors.colorSurfaceLow,
+        ),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .drawBehind {
                     if (isOn || animatedBrightness > 0f) {
-                        if (entity.supportsLightBrightness()) {
-                            val fillFraction = (animatedBrightness / 100f).coerceIn(0f, 1f)
-                                .let { if (isOn) it.coerceAtLeast(MINIMUM_BRIGHTNESS_FILL_FRACTION) else it }
-                            drawRect(
-                                color = accentColor,
-                                size = Size(width = size.width * fillFraction, height = size.height),
-                            )
-                        } else {
-                            drawRect(color = accentColor)
-                        }
+                        val fillFraction = (animatedBrightness / 100f).coerceIn(0f, 1f)
+                            .let { if (isOn) it.coerceAtLeast(MINIMUM_BRIGHTNESS_FILL_FRACTION) else it }
+                        drawRect(
+                            color = accentColor,
+                            size = Size(width = size.width * fillFraction, height = size.height),
+                        )
                     }
                 },
         ) {
@@ -206,23 +208,42 @@ fun LightEntityCard(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = friendlyName,
-                        color = textColor,
+                        text = group.name,
+                        color = if (isOn) colors.colorOnLightLoud else colors.colorTextSecondary,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = if (isOn && entity.supportsLightBrightness()) {
+                        text = if (isOn && supportsBrightness) {
                             "${animatedBrightness.toInt()}%"
                         } else if (isOn) {
                             "On"
                         } else {
                             "Off"
                         },
-                        color = textColor,
+                        color = if (isOn) colors.colorOnLightLoud else colors.colorTextSecondary,
                         fontSize = 16.sp,
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .background(
+                            color = Color.Black.copy(alpha = if (isOn) 0.18f else 0.05f),
+                            shape = CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (isExpanded) {
+                            Icons.Rounded.KeyboardArrowUp
+                        } else {
+                            Icons.Rounded.KeyboardArrowDown
+                        },
+                        contentDescription = null,
+                        tint = if (isOn) colors.colorOnLightLoud else colors.colorTextSecondary,
                     )
                 }
             }

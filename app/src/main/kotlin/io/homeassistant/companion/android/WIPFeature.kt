@@ -22,4 +22,16 @@ object WIPFeature {
      * This flag is only enabled in DEBUG builds during development.
      */
     val USE_FRONTEND_V2: Boolean = BuildConfig.DEBUG
+
+    /**
+     * Enables the native Compose Overview screen as the app's landing destination on cold start.
+     *
+     * When true, a cold start (no explicit deep link) navigates to
+     * [io.homeassistant.companion.android.overview.navigation.OverviewLandingRoute] instead of
+     * [FrontendRoute]. Explicit deep links (onboarding, Wear onboarding, or a specific
+     * `NavigateTo` target) are unaffected and keep routing to [FrontendRoute].
+     *
+     * This flag is only enabled in DEBUG builds during development.
+     */
+    val USE_NATIVE_OVERVIEW_LANDING: Boolean = BuildConfig.DEBUG
 }

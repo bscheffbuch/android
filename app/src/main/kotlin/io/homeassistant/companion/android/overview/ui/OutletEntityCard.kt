@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Outlet
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
@@ -19,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -31,17 +34,23 @@ import io.homeassistant.companion.android.common.data.integration.Entity
 import io.homeassistant.companion.android.common.data.integration.isActive
 
 private val OnStateBorderWidth = 2.dp
+private const val DISPLAYED_AS_LIGHT_FILL_ALPHA = 0.10f
 
 /**
- * A generic card for non-light entities.
+ * A card representing a switch entity with `device_class: outlet`.
+ *
+ * When [displayedAsLight] is enabled (a local, per-entity display preference set from the entity
+ * detail sheet), the card adopts the warmer visual treatment used for light entities while keeping
+ * the outlet icon, since many outlets power lamps and read better grouped visually with lights.
  *
  * Gestures:
  * - Tap: toggle on/off
  * - Long press: open detail sheet
  */
 @Composable
-fun GenericEntityCard(
+fun OutletEntityCard(
     entity: Entity,
+    displayedAsLight: Boolean,
     onToggle: () -> Unit,
     onOpenDetail: () -> Unit,
     modifier: Modifier = Modifier,
@@ -52,8 +61,16 @@ fun GenericEntityCard(
     val isOn = entity.isActive()
     val friendlyName = entity.attributes["friendly_name"]?.toString() ?: entity.entityId
 
-    val cardBg = if (isOn) colors.colorFillPrimaryQuietResting else colors.colorSurfaceLow
-    val iconTint = if (isOn) colors.colorOnPrimaryNormal else colors.colorTextDisabled
+    val cardBg = when {
+        !isOn -> colors.colorSurfaceLow
+        displayedAsLight -> colors.colorFillNeutralQuietResting
+        else -> colors.colorFillPrimaryQuietResting
+    }
+    val iconTint = when {
+        !isOn -> colors.colorTextDisabled
+        displayedAsLight -> colors.colorFillLightLoudResting
+        else -> colors.colorOnPrimaryNormal
+    }
     val textColor = if (isOn) colors.colorTextPrimary else colors.colorTextSecondary
     val cardShape = OverviewCardShape
     val gestureModifier = if (enabled) {
@@ -76,7 +93,7 @@ fun GenericEntityCard(
             .height(100.dp)
             .then(gestureModifier)
             .then(
-                if (isOn) {
+                if (isOn && !displayedAsLight) {
                     Modifier.border(OnStateBorderWidth, colors.colorBorderPrimaryLoud, cardShape)
                 } else {
                     Modifier
@@ -85,7 +102,15 @@ fun GenericEntityCard(
         shape = cardShape,
         colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawBehind {
+                    if (isOn && displayedAsLight) {
+                        drawRect(color = colors.colorFillLightLoudResting.copy(alpha = DISPLAYED_AS_LIGHT_FILL_ALPHA))
+                    }
+                },
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxSize()
@@ -93,7 +118,7 @@ fun GenericEntityCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = EntityIconProvider.iconForDomain(entity.domain, isOn),
+                    imageVector = Icons.Rounded.Outlet,
                     contentDescription = null,
                     tint = iconTint,
                     modifier = Modifier.size(28.dp),
