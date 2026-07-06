@@ -51,21 +51,21 @@ fun HomeBottomNavigationBar(
             selected = selectedTab == HomeContentTab.HOME,
             onClick = onSelectHome,
             icon = { Icon(imageVector = Icons.Rounded.Home, contentDescription = null) },
-            label = { Text(stringResource(commonR.string.overview_home_tab)) },
+            label = { Text(stringResource(commonR.string.overview_home_tab), maxLines = 1) },
             colors = itemColors,
         )
         NavigationBarItem(
             selected = selectedTab == HomeContentTab.AUTOMATIONS_AND_SCENES,
             onClick = onSelectAutomationsAndScenes,
             icon = { Icon(imageVector = Icons.Rounded.Bolt, contentDescription = null) },
-            label = { Text(stringResource(commonR.string.automations_scenes_title)) },
+            label = { Text(stringResource(commonR.string.overview_scenes_tab), maxLines = 1) },
             colors = itemColors,
         )
         NavigationBarItem(
             selected = selectedTab == null,
             onClick = onOpenSettings,
             icon = { Icon(imageVector = Icons.Rounded.Settings, contentDescription = null) },
-            label = { Text(stringResource(commonR.string.settings)) },
+            label = { Text(stringResource(commonR.string.settings), maxLines = 1) },
             colors = itemColors,
         )
     }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Lightbulb
 import androidx.compose.material.icons.rounded.Outlet
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -37,11 +38,13 @@ private val OnStateBorderWidth = 2.dp
 private const val DISPLAYED_AS_LIGHT_FILL_ALPHA = 0.10f
 
 /**
- * A card representing a switch entity with `device_class: outlet`.
+ * A card for an on/off entity in the Overview: an outlet switch by default, or any switch /
+ * input_boolean the user chose to display as a lamp.
  *
  * When [displayedAsLight] is enabled (a local, per-entity display preference set from the entity
- * detail sheet), the card adopts the warmer visual treatment used for light entities while keeping
- * the outlet icon, since many outlets power lamps and read better grouped visually with lights.
+ * detail sheet) the card adopts the warmer visual treatment used for light entities and swaps its
+ * outlet icon for a bulb, since these entities commonly drive lamps and read better grouped with
+ * lights. Brightness is not offered — these entities are on/off only.
  *
  * Gestures:
  * - Tap: toggle on/off
@@ -118,7 +121,7 @@ fun OutletEntityCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Outlet,
+                    imageVector = if (displayedAsLight) Icons.Rounded.Lightbulb else Icons.Rounded.Outlet,
                     contentDescription = null,
                     tint = iconTint,
                     modifier = Modifier.size(28.dp),

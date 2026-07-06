@@ -50,6 +50,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
@@ -91,6 +92,8 @@ import io.homeassistant.companion.android.common.data.integration.Entity
 import io.homeassistant.companion.android.overview.OverviewLightGroup
 import io.homeassistant.companion.android.overview.OverviewUiState
 import io.homeassistant.companion.android.overview.OverviewViewModel
+import io.homeassistant.companion.android.overview.isOutletSwitch
+import io.homeassistant.companion.android.overview.supportsDisplayAsLight
 import kotlin.math.abs
 import kotlinx.coroutines.flow.Flow
 import org.jetbrains.annotations.VisibleForTesting
@@ -148,7 +151,10 @@ fun OverviewScreen(
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        // The app bar's nested-scroll connection is applied INSIDE OverviewGrid (directly on the
+        // grid, inner to the pull-to-refresh), not here on the Scaffold. Otherwise pull-to-refresh
+        // sits inner to the app bar and eats the pull-down-at-top gesture that the collapsed
+        // LargeTopAppBar needs to re-expand, leaving the header stuck collapsed ("can't scroll up").
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             LargeTopAppBar(
@@ -223,6 +229,7 @@ fun OverviewScreen(
                 }
                 OverviewGrid(
                     displayItems = displayItems,
+                    scrollBehavior = scrollBehavior,
                     isEditMode = uiState.isEditMode,
                     isRefreshing = uiState.isRefreshing,
                     onRefresh = onRefresh,
@@ -324,6 +331,7 @@ fun OverviewScreen(
 @Composable
 private fun OverviewGrid(
     displayItems: List<OverviewDisplayItem>,
+    scrollBehavior: TopAppBarScrollBehavior,
     isEditMode: Boolean,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
@@ -380,7 +388,9 @@ private fun OverviewGrid(
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(OverviewCardGap),
             horizontalArrangement = Arrangement.spacedBy(OverviewCardGap),
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
         ) {
             itemsIndexed(
                 items = borrowedNeighbors.items,
@@ -663,7 +673,6 @@ private fun OverviewEntityItemContent(
     onCycleHumidifierMode: (entityId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val deviceClass = entity.attributes["device_class"] as? String
     when {
         entity.domain == "light" -> LightEntityCard(
             entity = entity,
@@ -676,9 +685,20 @@ private fun OverviewEntityItemContent(
             modifier = modifier,
         )
 
-        entity.domain == "switch" && deviceClass == "outlet" -> OutletEntityCard(
+        // Any on/off entity the user chose to show as a lamp (switch, outlet, or input_boolean)
+        // renders through the outlet card in its light treatment: warm fill and a bulb icon.
+        entity.supportsDisplayAsLight() && entity.entityId in displayedAsLightEntityIds -> OutletEntityCard(
             entity = entity,
-            displayedAsLight = entity.entityId in displayedAsLightEntityIds,
+            displayedAsLight = true,
+            onToggle = { onToggleEntity(entity.entityId) },
+            onOpenDetail = { onOpenEntityDetail(entity) },
+            enabled = !isEditMode,
+            modifier = modifier,
+        )
+
+        entity.isOutletSwitch() -> OutletEntityCard(
+            entity = entity,
+            displayedAsLight = false,
             onToggle = { onToggleEntity(entity.entityId) },
             onOpenDetail = { onOpenEntityDetail(entity) },
             enabled = !isEditMode,

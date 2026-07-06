@@ -51,6 +51,7 @@ import io.homeassistant.companion.android.common.data.integration.isActive
 import io.homeassistant.companion.android.common.data.integration.supportsLightBrightness
 import io.homeassistant.companion.android.overview.OverviewLightGroup
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.withTimeoutOrNull
 
 // Ensures the brightness fill stays visible even when the group reports very low or zero
@@ -108,8 +109,10 @@ fun LightGroupCard(
                     return@awaitEachGesture
                 }
                 val startX = down.position.x
+                val startY = down.position.y
                 val brightnessAtGestureStart = displayBrightness
                 var dragStarted = false
+                var yieldedToScroll = false
 
                 val result = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                     var active = true
@@ -120,10 +123,18 @@ fun LightGroupCard(
                             active = false
                         } else {
                             val dx = change.position.x - startX
-                            if (!dragStarted && abs(dx) > viewConfiguration.touchSlop) {
-                                dragStarted = true
-                                isDragging = true
-                                return@withTimeoutOrNull true
+                            val dy = change.position.y - startY
+                            if (!dragStarted) {
+                                if (abs(dx) > viewConfiguration.touchSlop && abs(dx) >= abs(dy)) {
+                                    dragStarted = true
+                                    isDragging = true
+                                    return@withTimeoutOrNull true
+                                } else if (abs(dy) > viewConfiguration.touchSlop) {
+                                    // Predominantly vertical movement is a list scroll, not a card
+                                    // interaction — yield so the grid scrolls instead of us toggling.
+                                    yieldedToScroll = true
+                                    return@withTimeoutOrNull false
+                                }
                             }
                         }
                     }
@@ -131,6 +142,8 @@ fun LightGroupCard(
                 }
 
                 when {
+                    yieldedToScroll -> Unit // yielded to a list scroll — neither toggle nor drag
+
                     result == null -> {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onOpenDetail()
@@ -156,8 +169,15 @@ fun LightGroupCard(
                             } else if (supportsBrightness) {
                                 change.consume()
                                 val dx = change.position.x - startX
-                                displayBrightness = (brightnessAtGestureStart + dx / size.width.toFloat() * 100f)
-                                    .coerceIn(0f, 100f)
+                                // Snap to the extremes at the card's physical edges so 0% and 100%
+                                // are reachable by dragging to the edge, instead of stalling ~1%
+                                // short and forcing an over-drag past the card to top out.
+                                displayBrightness = when {
+                                    change.position.x >= size.width.toFloat() -> 100f
+                                    change.position.x <= 0f -> 0f
+                                    else -> (brightnessAtGestureStart + dx / size.width.toFloat() * 100f)
+                                        .coerceIn(0f, 100f)
+                                }
                                 onBrightnessChange(displayBrightness, false)
                             }
                         }
@@ -217,7 +237,9 @@ fun LightGroupCard(
                     )
                     Text(
                         text = if (isOn && supportsBrightness) {
-                            "${animatedBrightness.toInt()}%"
+                            // Round (not truncate) to match Home Assistant's frontend, so a light at
+                            // its practical max (HA brightness 254 = 99.6%) reads "100%", not "99%".
+                            "${animatedBrightness.roundToInt()}%"
                         } else if (isOn) {
                             "On"
                         } else {

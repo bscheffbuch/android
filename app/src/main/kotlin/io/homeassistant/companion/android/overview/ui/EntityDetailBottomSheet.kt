@@ -63,6 +63,8 @@ import io.homeassistant.companion.android.common.data.integration.isActive
 import io.homeassistant.companion.android.common.data.integration.supportsLightBrightness
 import io.homeassistant.companion.android.common.data.integration.supportsLightColorTemperature
 import io.homeassistant.companion.android.overview.OverviewLightGroup
+import io.homeassistant.companion.android.overview.isOutletSwitch
+import io.homeassistant.companion.android.overview.supportsDisplayAsLight
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -85,7 +87,7 @@ fun EntityDetailBottomSheet(
     val isOn = entity.isActive()
     val friendlyName = entity.attributes["friendly_name"]?.toString() ?: entity.entityId
     val deviceClass = entity.attributes["device_class"] as? String
-    val isOutlet = entity.domain == "switch" && deviceClass == "outlet"
+    val canDisplayAsLight = entity.supportsDisplayAsLight()
     LightControlBottomSheet(
         title = friendlyName,
         subtitle = entity.state.replaceFirstChar { it.uppercaseChar() },
@@ -106,8 +108,14 @@ fun EntityDetailBottomSheet(
         onBrightnessChange = onBrightnessChange,
         onColorChange = onColorChange,
         onColorTemperatureChange = onColorTemperatureChange,
-        extraContent = if (isOutlet && onDisplayedAsLightChange != null) {
-            { DisplayedAsRow(displayedAsLight = displayedAsLight, onDisplayedAsLightChange = onDisplayedAsLightChange) }
+        extraContent = if (canDisplayAsLight && onDisplayedAsLightChange != null) {
+            {
+                DisplayedAsRow(
+                    displayedAsLight = displayedAsLight,
+                    isOutlet = entity.isOutletSwitch(),
+                    onDisplayedAsLightChange = onDisplayedAsLightChange,
+                )
+            }
         } else {
             null
         },
@@ -390,7 +398,7 @@ private fun LightControlBottomSheet(
 }
 
 @Composable
-private fun DisplayedAsRow(displayedAsLight: Boolean, onDisplayedAsLightChange: (Boolean) -> Unit) {
+private fun DisplayedAsRow(displayedAsLight: Boolean, isOutlet: Boolean, onDisplayedAsLightChange: (Boolean) -> Unit) {
     val colors = LocalHAColorScheme.current
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -404,7 +412,13 @@ private fun DisplayedAsRow(displayedAsLight: Boolean, onDisplayedAsLightChange: 
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             DisplayedAsOption(
-                label = stringResource(commonR.string.overview_displayed_as_outlet),
+                label = stringResource(
+                    if (isOutlet) {
+                        commonR.string.overview_displayed_as_outlet
+                    } else {
+                        commonR.string.overview_displayed_as_switch
+                    },
+                ),
                 selected = !displayedAsLight,
                 onClick = { onDisplayedAsLightChange(false) },
             )

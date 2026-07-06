@@ -196,11 +196,7 @@ class OverviewViewModel @Inject constructor(
     }.filter { it.entityIds.size >= 2 }
 
     private fun Set<String>.sanitizeDisplayedAsLightOverrides(): Set<String> = filter { entityId ->
-        entityMap[entityId]?.let {
-            it.domain == "switch" &&
-                it.attributes["device_class"] == "outlet"
-        } ==
-            true
+        entityMap[entityId]?.supportsDisplayAsLight() == true
     }
         .toSet()
 
@@ -815,7 +811,7 @@ class OverviewViewModel @Inject constructor(
 
     fun setDisplayedAsLight(entityId: String, asLight: Boolean) {
         val entity = entityMap[entityId] ?: return
-        if (entity.domain != "switch" || entity.attributes["device_class"] != "outlet") return
+        if (!entity.supportsDisplayAsLight()) return
         displayedAsLightOverrides = if (asLight) {
             displayedAsLightOverrides + entityId
         } else {

@@ -1493,6 +1493,7 @@
     <string name="overview_group_color">Group color</string>
     <string name="overview_displayed_as">Displayed as</string>
     <string name="overview_displayed_as_outlet">Outlet</string>
+    <string name="overview_displayed_as_switch">Switch</string>
     <string name="overview_displayed_as_light">Light</string>
     <string name="overview_automation_run_now">Run now</string>
     <string name="overview_action_failed">Action failed. Please try again.</string>
@@ -1500,6 +1501,7 @@
     <string name="overview_climate_decrease_temperature">Decrease target temperature</string>
     <string name="overview_climate_increase_temperature">Increase target temperature</string>
     <string name="overview_home_tab">Home</string>
+    <string name="overview_scenes_tab">Scenes</string>
     <string name="automations_scenes_title">Automations &amp; Scenes</string>
     <string name="automations_scene_activate">Activate scene</string>
     <string name="overview_media_player_previous_track">Previous track</string>
