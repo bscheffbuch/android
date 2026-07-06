@@ -378,8 +378,8 @@ private fun OverviewGrid(
             state = lazyGridState,
             columns = GridCells.Fixed(2),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(OverviewCardGap),
+            horizontalArrangement = Arrangement.spacedBy(OverviewCardGap),
             modifier = Modifier.fillMaxSize(),
         ) {
             itemsIndexed(
@@ -900,6 +900,11 @@ internal fun ExpandedLightGroupCard(
     // keeps its own domain color and sits outside the frame, so it stands out without extra styling.
     val tint = accentColor.copy(alpha = GROUP_HIGHLIGHT_TINT_ALPHA)
     val memberAccentColor = accentColor
+    // Outline drawn around the group's controller (main) card while expanded so it's obvious which
+    // cell drives the whole group — the controller and its member lights otherwise share the same
+    // accent fill. Uses the primary text color so the ring stays legible over both the accent-filled
+    // (on) and dark (off) controller states, in light and dark themes alike.
+    val controllerOutlineColor = LocalHAColorScheme.current.colorTextPrimary
     var completeRowsHeightPx by remember { mutableIntStateOf(0) }
 
     // The member cells sit exactly where ordinary grid cells would (no extra padding around them),
@@ -910,7 +915,7 @@ internal fun ExpandedLightGroupCard(
     // and breaking the grid's rhythm (and misaligning member cards against the outside columns).
     val highlightShape: Shape = if (hasPartialTrailingRow && completeRowsHeightPx > 0) {
         GroupHighlightShape(
-            stepYPx = completeRowsHeightPx + with(density) { 8.dp.toPx() },
+            stepYPx = completeRowsHeightPx + with(density) { OverviewCardGap.toPx() },
             cornerRadiusPx = with(density) { (OverviewCardCornerRadius + GroupHighlightBleed).toPx() },
         )
     } else {
@@ -933,7 +938,7 @@ internal fun ExpandedLightGroupCard(
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(OverviewCardGap),
         ) {
             val completeRows = entities.drop(1).chunked(2).let { if (hasPartialTrailingRow) it.dropLast(1) else it }
             val firstRowMember = entities.firstOrNull()
@@ -953,6 +958,14 @@ internal fun ExpandedLightGroupCard(
                     if (isEditMode) {
                         GroupEditOverlay(onEdit = onEditGroup, onDelete = onDeleteGroup)
                     }
+                    // Drawn last (on top of the card) so the ring stays visible over the accent
+                    // brightness fill; a plain border-only Box does not intercept taps, so the
+                    // controller card underneath stays fully interactive.
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .border(width = 2.dp, color = controllerOutlineColor, shape = OverviewCardShape),
+                    )
                 }
             }
             val firstMember: @Composable RowScope.() -> Unit = {
@@ -982,11 +995,11 @@ internal fun ExpandedLightGroupCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .onSizeChanged { completeRowsHeightPx = it.height },
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(OverviewCardGap),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(OverviewCardGap),
                 ) {
                     if (isAnchorRightColumn) {
                         firstMember()
@@ -999,7 +1012,7 @@ internal fun ExpandedLightGroupCard(
                 completeRows.forEach { rowEntities ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(OverviewCardGap),
                     ) {
                         rowEntities.forEach { entity ->
                             LightEntityCard(
@@ -1027,7 +1040,7 @@ internal fun ExpandedLightGroupCard(
                 val lastMember = entities.last()
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(OverviewCardGap),
                 ) {
                     LightEntityCard(
                         entity = lastMember,
@@ -1314,11 +1327,11 @@ private const val LIGHT_PICKER_SELECTED_CONTAINER_ALPHA = 0.22f
 private const val GROUP_HIGHLIGHT_TINT_ALPHA = 0.3f
 
 // How far the expanded group's highlight bleeds past the group's item bounds into the surrounding
-// 8dp grid gaps — exactly half the gap. The member cells sit at ordinary grid positions, so this
-// bleed keeps the card-to-card rhythm uniform across the highlight's edge: 4dp tint + 4dp plain
-// background add up to the same 8dp gap that separates any two ordinary cards (per the Figma
-// reference, whose highlight margin is likewise half its grid gap).
-private val GroupHighlightBleed = 4.dp
+// grid gaps — exactly half of [OverviewCardGap]. The member cells sit at ordinary grid positions, so
+// this bleed keeps the card-to-card rhythm uniform across the highlight's edge: half-gap of tint plus
+// half-gap of plain background add up to the same gap that separates any two ordinary cards (per the
+// Figma reference, whose highlight margin is likewise half its grid gap).
+private val GroupHighlightBleed = OverviewCardGap / 2f
 
 // Kept as a plain ARGB literal (rather than an HAColorScheme token) since it's persisted as the
 // group's stored color and read outside of composition. Deliberately distinct from

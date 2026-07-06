@@ -7,3 +7,8 @@ import androidx.compose.ui.unit.dp
 // shared by every Overview entity card so corner rounding is visually consistent across domains.
 internal val OverviewCardCornerRadius = 24.dp
 internal val OverviewCardShape = RoundedCornerShape(OverviewCardCornerRadius)
+
+// The single gap used everywhere in the Overview grid — between cards horizontally and vertically,
+// and inside an expanded light group. The group highlight's bleed is derived as exactly half of it,
+// so widening this here keeps the tinted frame's spacing even with the grid automatically.
+internal val OverviewCardGap = 12.dp
