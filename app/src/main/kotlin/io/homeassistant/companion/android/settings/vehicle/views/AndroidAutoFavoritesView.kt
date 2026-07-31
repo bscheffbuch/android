@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.CircularProgressIndicator
-import androidx.compose.material.Text
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,16 +21,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
 import io.homeassistant.companion.android.common.R as commonR
-import io.homeassistant.companion.android.common.compose.theme.HATheme
+import io.homeassistant.companion.android.common.compose.composable.HADropdownItem
+import io.homeassistant.companion.android.common.compose.composable.HADropdownMenu
+import io.homeassistant.companion.android.common.compose.theme.HADimens
+import io.homeassistant.companion.android.common.compose.theme.HATextStyle
+import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import io.homeassistant.companion.android.common.data.integration.Entity
 import io.homeassistant.companion.android.common.data.integration.friendlyName
 import io.homeassistant.companion.android.common.data.prefs.AutoFavorite
 import io.homeassistant.companion.android.database.server.Server
 import io.homeassistant.companion.android.settings.vehicle.ManageAndroidAutoViewModel
 import io.homeassistant.companion.android.util.compose.FavoriteEntityRow
-import io.homeassistant.companion.android.util.compose.ServerExposedDropdownMenu
 import io.homeassistant.companion.android.util.compose.entity.EntityPicker
 import io.homeassistant.companion.android.util.plus
 import io.homeassistant.companion.android.util.safeBottomPaddingValues
@@ -71,55 +74,61 @@ fun AndroidAutoFavoritesSettings(
 
     LazyColumn(
         state = lazyListState,
-        contentPadding = PaddingValues(vertical = 16.dp) + safeBottomPaddingValues(applyHorizontal = false),
+        contentPadding = PaddingValues(vertical = HADimens.SPACE4) + safeBottomPaddingValues(applyHorizontal = false),
         modifier = modifier,
     ) {
         item {
             Text(
                 text = stringResource(commonR.string.aa_set_favorites),
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                style = HATextStyle.Body.copy(fontWeight = FontWeight.Bold, textAlign = TextAlign.Start),
+                color = LocalHAColorScheme.current.colorTextPrimary,
+                modifier = Modifier.padding(horizontal = HADimens.SPACE4).padding(bottom = HADimens.SPACE4),
             )
         }
 
         if (androidAutoViewModel.isLoading) {
             item {
-                Box(modifier = Modifier.fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(top = HADimens.SPACE4),
+                    contentAlignment = Alignment.Center,
+                ) {
                     CircularProgressIndicator()
                 }
             }
         } else {
             if (serversList.size > 1) {
                 item {
-                    ServerExposedDropdownMenu(
-                        servers = serversList,
-                        current = selectedServer,
-                        onSelected = {
+                    HADropdownMenu(
+                        items = serversList.map { HADropdownItem(key = it.id, label = it.friendlyName) },
+                        selectedKey = selectedServer,
+                        onItemSelected = {
                             androidAutoViewModel.loadEntities(it)
                             selectedServer = it
                         },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                        label = stringResource(commonR.string.server_select),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = HADimens.SPACE4)
+                            .padding(bottom = HADimens.SPACE4),
                     )
                 }
             }
 
             item {
                 // TODO use new theme for Material3 components https://github.com/home-assistant/android/issues/6302
-                HATheme {
-                    EntityPicker(
-                        entities = validEntities,
-                        selectedEntityId = null,
-                        onEntityCleared = { /* Nothing */ },
-                        onEntitySelectedId = {
-                            androidAutoViewModel.onEntitySelected(true, it, selectedServer)
-                        },
-                        addButtonText = stringResource(commonR.string.add_favorite),
-                        entityRegistry = androidAutoViewModel.entityRegistry,
-                        deviceRegistry = androidAutoViewModel.deviceRegistry,
-                        areaRegistry = androidAutoViewModel.areaRegistry,
-                        modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
-                    )
-                }
+                EntityPicker(
+                    entities = validEntities,
+                    selectedEntityId = null,
+                    onEntityCleared = { /* Nothing */ },
+                    onEntitySelectedId = {
+                        androidAutoViewModel.onEntitySelected(true, it, selectedServer)
+                    },
+                    addButtonText = stringResource(commonR.string.add_favorite),
+                    entityRegistry = androidAutoViewModel.entityRegistry,
+                    deviceRegistry = androidAutoViewModel.deviceRegistry,
+                    areaRegistry = androidAutoViewModel.areaRegistry,
+                    modifier = Modifier.padding(horizontal = HADimens.SPACE4).padding(bottom = HADimens.SPACE4),
+                )
             }
             if (favoriteEntities.isNotEmpty() && androidAutoViewModel.sortedEntities.isNotEmpty()) {
                 items(favoriteEntities.size, { favoriteEntities[it] }) { index ->
@@ -145,6 +154,7 @@ fun AndroidAutoFavoritesSettings(
                                 checked = true,
                                 draggable = true,
                                 isDragging = isDragging,
+                                modifier = Modifier.padding(horizontal = HADimens.SPACE4, vertical = HADimens.SPACE1),
                             )
                         }
                     }

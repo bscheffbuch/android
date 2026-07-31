@@ -3,32 +3,44 @@ package io.homeassistant.companion.android.automations.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -41,6 +53,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.homeassistant.companion.android.automations.AutomationsUiState
 import io.homeassistant.companion.android.automations.AutomationsViewModel
+import io.homeassistant.companion.android.automations.SaveSceneDialogUiState
+import io.homeassistant.companion.android.automations.SceneEntityCandidate
 import io.homeassistant.companion.android.common.R as commonR
 import io.homeassistant.companion.android.common.compose.composable.HASettingsCard
 import io.homeassistant.companion.android.common.compose.composable.HASwitch
@@ -61,6 +75,7 @@ fun AutomationsScreen(
     viewModel: AutomationsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val saveSceneDialogState by viewModel.saveSceneDialogState.collectAsStateWithLifecycle()
     AutomationsScreen(
         uiState = uiState,
         onToggle = viewModel::toggle,
@@ -68,6 +83,10 @@ fun AutomationsScreen(
         onActivateScene = viewModel::activateScene,
         errorEvents = viewModel.errorEvents,
         onNavigateBack = onNavigateBack,
+        saveSceneDialogState = saveSceneDialogState,
+        onCreateSceneClicked = viewModel::onCreateSceneClicked,
+        onDismissCreateScene = viewModel::onDismissCreateScene,
+        onSaveScene = viewModel::saveScene,
         modifier = modifier,
     )
 }
@@ -81,6 +100,10 @@ internal fun AutomationsScreen(
     onActivateScene: (String) -> Unit,
     errorEvents: Flow<String>,
     onNavigateBack: (() -> Unit)? = null,
+    saveSceneDialogState: SaveSceneDialogUiState = SaveSceneDialogUiState.Hidden,
+    onCreateSceneClicked: () -> Unit = {},
+    onDismissCreateScene: () -> Unit = {},
+    onSaveScene: (String, Set<String>) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalHAColorScheme.current
@@ -95,6 +118,17 @@ internal fun AutomationsScreen(
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            if (uiState is AutomationsUiState.Success) {
+                ExtendedFloatingActionButton(
+                    onClick = onCreateSceneClicked,
+                    icon = { Icon(Icons.Rounded.Add, contentDescription = null) },
+                    text = { Text(stringResource(commonR.string.overview_save_scene_dialog_title)) },
+                    containerColor = colors.colorFillPrimaryLoudResting,
+                    contentColor = colors.colorOnPrimaryLoud,
+                )
+            }
+        },
         topBar = {
             LargeTopAppBar(
                 title = { Text(stringResource(commonR.string.automations_scenes_title)) },
@@ -160,6 +194,16 @@ internal fun AutomationsScreen(
                 }
             }
         }
+    }
+
+    when (val dialog = saveSceneDialogState) {
+        SaveSceneDialogUiState.Hidden -> Unit
+        SaveSceneDialogUiState.Loading -> SaveSceneLoadingDialog(onDismiss = onDismissCreateScene)
+        is SaveSceneDialogUiState.Ready -> SaveSceneDialog(
+            state = dialog,
+            onDismiss = onDismissCreateScene,
+            onSave = onSaveScene,
+        )
     }
 }
 
@@ -237,6 +281,147 @@ private fun SceneRow(entity: Entity, onActivate: () -> Unit) {
             )
         }
     }
+}
+
+@Composable
+private fun SaveSceneDialog(
+    state: SaveSceneDialogUiState.Ready,
+    onDismiss: () -> Unit,
+    onSave: (String, Set<String>) -> Unit,
+) {
+    val colors = LocalHAColorScheme.current
+    var name by remember { mutableStateOf("") }
+    var selectedIds by remember(state.candidates) {
+        mutableStateOf(state.candidates.map { it.entityId }.toSet())
+    }
+    val canSave = name.isNotBlank() && selectedIds.isNotEmpty() && !state.isSaving
+
+    AlertDialog(
+        onDismissRequest = { if (!state.isSaving) onDismiss() },
+        title = { Text(stringResource(commonR.string.overview_save_scene_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(HADimens.SPACE3)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(commonR.string.overview_save_scene_name_label)) },
+                    singleLine = true,
+                    enabled = !state.isSaving,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (state.candidates.isEmpty()) {
+                    Text(
+                        text = stringResource(commonR.string.overview_save_scene_empty),
+                        color = colors.colorTextSecondary,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(commonR.string.overview_save_scene_entities_header),
+                        color = colors.colorTextPrimary,
+                    )
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(HADimens.SPACE1),
+                        modifier = Modifier.heightIn(max = 320.dp),
+                    ) {
+                        items(state.candidates, key = { it.entityId }) { candidate ->
+                            val selected = candidate.entityId in selectedIds
+                            SceneEntityPickerRow(
+                                candidate = candidate,
+                                selected = selected,
+                                enabled = !state.isSaving,
+                                onToggle = {
+                                    selectedIds = if (selected) {
+                                        selectedIds - candidate.entityId
+                                    } else {
+                                        selectedIds + candidate.entityId
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = canSave, onClick = { onSave(name, selectedIds) }) {
+                if (state.isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = colors.colorFillPrimaryLoudResting,
+                    )
+                } else {
+                    Text(stringResource(commonR.string.save))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !state.isSaving) {
+                Text(stringResource(commonR.string.cancel))
+            }
+        },
+        containerColor = colors.colorSurfaceDefault,
+        titleContentColor = colors.colorTextPrimary,
+        textContentColor = colors.colorTextPrimary,
+    )
+}
+
+@Composable
+private fun SceneEntityPickerRow(
+    candidate: SceneEntityCandidate,
+    selected: Boolean,
+    enabled: Boolean,
+    onToggle: () -> Unit,
+) {
+    val colors = LocalHAColorScheme.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onToggle),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(HADimens.SPACE2),
+    ) {
+        Checkbox(
+            checked = selected,
+            onCheckedChange = { onToggle() },
+            enabled = enabled,
+            colors = CheckboxDefaults.colors(checkedColor = colors.colorFillPrimaryLoudResting),
+        )
+        Text(
+            text = candidate.friendlyName,
+            style = HATextStyle.Body,
+            color = colors.colorTextPrimary,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun SaveSceneLoadingDialog(onDismiss: () -> Unit) {
+    val colors = LocalHAColorScheme.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(commonR.string.overview_save_scene_dialog_title)) },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(HADimens.SPACE4),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(color = colors.colorFillPrimaryLoudResting)
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(commonR.string.cancel))
+            }
+        },
+        containerColor = colors.colorSurfaceDefault,
+        titleContentColor = colors.colorTextPrimary,
+        textContentColor = colors.colorTextPrimary,
+    )
 }
 
 @Composable

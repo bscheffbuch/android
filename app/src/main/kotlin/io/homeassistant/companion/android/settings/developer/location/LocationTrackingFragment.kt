@@ -18,9 +18,9 @@ import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import io.homeassistant.companion.android.R
 import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.theme.HATheme
 import io.homeassistant.companion.android.common.data.servers.ServerManager
 import io.homeassistant.companion.android.settings.developer.location.views.LocationTrackingView
-import io.homeassistant.companion.android.util.compose.HomeAssistantAppTheme
 import javax.inject.Inject
 
 private const val FAQ_LINK =
@@ -37,7 +37,7 @@ class LocationTrackingFragment : Fragment() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return ComposeView(requireContext()).apply {
             setContent {
-                HomeAssistantAppTheme {
+                HATheme {
                     LocationTrackingView(
                         useHistory = viewModel.historyEnabled,
                         onSetHistory = viewModel::enableHistory,

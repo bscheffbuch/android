@@ -1,7 +1,6 @@
 package io.homeassistant.companion.android.settings.qs.views
 
 import android.os.Build
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,37 +9,33 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Button
-import androidx.compose.material.Divider
-import androidx.compose.material.DropdownMenu
-import androidx.compose.material.DropdownMenuItem
-import androidx.compose.material.OutlinedButton
-import androidx.compose.material.Scaffold
-import androidx.compose.material.SnackbarHost
-import androidx.compose.material.Switch
-import androidx.compose.material.SwitchDefaults
-import androidx.compose.material.Text
-import androidx.compose.material.TextButton
-import androidx.compose.material.TextField
-import androidx.compose.material.rememberScaffoldState
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.mikepenz.iconics.compose.Image
 import io.homeassistant.companion.android.common.R
-import io.homeassistant.companion.android.common.compose.theme.HATheme
+import io.homeassistant.companion.android.common.compose.composable.HADropdownItem
+import io.homeassistant.companion.android.common.compose.composable.HADropdownMenu
+import io.homeassistant.companion.android.common.compose.composable.HAFilledButton
+import io.homeassistant.companion.android.common.compose.composable.HAPlainButton
+import io.homeassistant.companion.android.common.compose.composable.HASwitch
+import io.homeassistant.companion.android.common.compose.composable.HATextField
+import io.homeassistant.companion.android.common.compose.theme.HADimens
+import io.homeassistant.companion.android.common.compose.theme.HATextStyle
+import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import io.homeassistant.companion.android.settings.qs.ManageTilesViewModel
-import io.homeassistant.companion.android.util.compose.ServerExposedDropdownMenu
 import io.homeassistant.companion.android.util.compose.entity.EntityPicker
 import io.homeassistant.companion.android.util.safeBottomPaddingValues
 import io.homeassistant.companion.android.util.safeBottomWindowInsets
@@ -55,181 +50,144 @@ fun ManageTilesView(
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
-    var expandedTile by remember { mutableStateOf(false) }
+    val colorScheme = LocalHAColorScheme.current
 
-    val scaffoldState = rememberScaffoldState()
+    val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect("snackbar") {
         viewModel.tileInfoSnackbar.onEach {
             if (it != 0) {
-                scaffoldState.snackbarHostState.showSnackbar(context.getString(it))
+                snackbarHostState.showSnackbar(context.getString(it))
             }
         }.launchIn(this)
     }
 
     Scaffold(
         modifier = modifier,
-        scaffoldState = scaffoldState,
         snackbarHost = {
             SnackbarHost(
-                hostState = scaffoldState.snackbarHostState,
+                hostState = snackbarHostState,
                 modifier = Modifier.windowInsetsPadding(safeBottomWindowInsets(applyHorizontal = false)),
             )
         },
     ) { contentPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .padding(contentPadding)
-                .verticalScroll(scrollState),
+                .verticalScroll(scrollState)
+                .padding(safeBottomPaddingValues(applyHorizontal = false))
+                .padding(all = HADimens.SPACE4),
         ) {
-            Column(
-                modifier = Modifier
-                    .padding(safeBottomPaddingValues(applyHorizontal = false))
-                    .padding(all = 16.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.tile_select),
-                        fontSize = 15.sp,
-                        modifier = Modifier.padding(end = 10.dp),
-                    )
-                    Box {
-                        OutlinedButton(onClick = { expandedTile = true }) {
-                            Text(viewModel.selectedTile.name)
-                        }
+            HADropdownMenu(
+                items = viewModel.slots.map { HADropdownItem(key = it, label = it.name) },
+                selectedKey = viewModel.selectedTile,
+                onItemSelected = { slot -> viewModel.selectTile(viewModel.slots.indexOf(slot)) },
+                label = stringResource(R.string.tile_select),
+            )
 
-                        DropdownMenu(expanded = expandedTile, onDismissRequest = { expandedTile = false }) {
-                            for ((index, slot) in viewModel.slots.withIndex()) {
-                                DropdownMenuItem(onClick = {
-                                    viewModel.selectTile(index)
-                                    expandedTile = false
-                                }) {
-                                    Text(slot.name)
-                                }
-                            }
-                        }
-                    }
-                }
+            HATextField(
+                value = viewModel.tileLabel,
+                onValueChange = { viewModel.tileLabel = it },
+                label = { Text(text = stringResource(id = R.string.tile_label)) },
+                modifier = Modifier.padding(top = HADimens.SPACE4),
+            )
 
-                Divider()
-                TextField(
-                    value = viewModel.tileLabel,
-                    onValueChange = { viewModel.tileLabel = it },
-                    label = {
-                        Text(text = stringResource(id = R.string.tile_label))
-                    },
-                    modifier = Modifier
-                        .padding(top = 16.dp)
-                        .fillMaxWidth(),
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                HATextField(
+                    value = viewModel.tileSubtitle.orEmpty(),
+                    onValueChange = { viewModel.tileSubtitle = it },
+                    label = { Text(text = stringResource(id = R.string.tile_subtitle)) },
+                    modifier = Modifier.padding(top = HADimens.SPACE4),
                 )
+            }
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    TextField(
-                        value = viewModel.tileSubtitle.orEmpty(),
-                        onValueChange = { viewModel.tileSubtitle = it },
-                        label = {
-                            Text(text = stringResource(id = R.string.tile_subtitle))
-                        },
-                        modifier = Modifier
-                            .padding(top = 16.dp)
-                            .fillMaxWidth(),
-                    )
-                }
+            if (viewModel.servers.size > 1 || viewModel.servers.none { it.id == viewModel.selectedServerId }) {
+                HADropdownMenu(
+                    items = viewModel.servers.map { HADropdownItem(key = it.id, label = it.friendlyName) },
+                    selectedKey = viewModel.selectedServerId,
+                    onItemSelected = viewModel::selectServerId,
+                    label = stringResource(R.string.tile_server),
+                    modifier = Modifier.padding(top = HADimens.SPACE4),
+                )
+            }
 
-                if (viewModel.servers.size > 1 || viewModel.servers.none { it.id == viewModel.selectedServerId }) {
-                    ServerExposedDropdownMenu(
-                        servers = viewModel.servers,
-                        current = viewModel.selectedServerId,
-                        onSelected = viewModel::selectServerId,
-                        title = R.string.tile_server,
-                        modifier = Modifier.padding(top = 16.dp),
-                    )
-                }
+            EntityPicker(
+                entities = viewModel.sortedEntities,
+                selectedEntityId = viewModel.selectedEntityId,
+                onEntitySelectedId = { viewModel.selectEntityId(it) },
+                onEntityCleared = { viewModel.selectEntityId("") },
+                modifier = Modifier.padding(vertical = HADimens.SPACE4),
+                addButtonText = stringResource(R.string.tile_entity),
+                entityRegistry = viewModel.entityRegistry,
+                deviceRegistry = viewModel.deviceRegistry,
+                areaRegistry = viewModel.areaRegistry,
+            )
 
-                // TODO use new theme for Material3 components https://github.com/home-assistant/android/issues/6301
-                HATheme {
-                    EntityPicker(
-                        entities = viewModel.sortedEntities,
-                        selectedEntityId = viewModel.selectedEntityId,
-                        onEntitySelectedId = {
-                            viewModel.selectEntityId(it)
-                        },
-                        onEntityCleared = {
-                            viewModel.selectEntityId("")
-                        },
-                        modifier = Modifier
-                            .padding(vertical = 16.dp),
-                        addButtonText = stringResource(R.string.tile_entity),
-                        entityRegistry = viewModel.entityRegistry,
-                        deviceRegistry = viewModel.deviceRegistry,
-                        areaRegistry = viewModel.areaRegistry,
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(id = R.string.tile_icon),
-                        fontSize = 15.sp,
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                    OutlinedButton(
-                        onClick = { onShowIconDialog(viewModel.selectedTile.id) },
-                    ) {
-                        viewModel.selectedIcon?.let { icon ->
-                            com.mikepenz.iconics.compose.Image(
-                                icon,
-                                contentDescription = stringResource(id = R.string.tile_icon),
-                                colorFilter = ColorFilter.tint(colorResource(R.color.colorAccent)),
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-                    if (viewModel.selectedIconId != null && viewModel.selectedEntityId.isNotBlank()) {
-                        TextButton(
-                            modifier = Modifier.padding(start = 4.dp),
-                            onClick = { viewModel.selectIcon(null) },
-                        ) {
-                            Text(text = stringResource(R.string.tile_icon_original))
-                        }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(id = R.string.tile_icon),
+                    style = HATextStyle.BodyMedium,
+                    color = colorScheme.colorTextPrimary,
+                    modifier = Modifier.padding(end = HADimens.SPACE2),
+                )
+                IconButton(onClick = { onShowIconDialog(viewModel.selectedTile.id) }) {
+                    viewModel.selectedIcon?.let { icon ->
+                        Image(
+                            icon,
+                            contentDescription = stringResource(id = R.string.tile_icon),
+                            colorFilter = ColorFilter.tint(colorScheme.colorFillPrimaryLoudResting),
+                            modifier = Modifier.size(HADimens.SPACE6),
+                        )
                     }
                 }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.tile_vibrate),
-                        fontSize = 15.sp,
+                if (viewModel.selectedIconId != null && viewModel.selectedEntityId.isNotBlank()) {
+                    HAPlainButton(
+                        text = stringResource(R.string.tile_icon_original),
+                        onClick = { viewModel.selectIcon(null) },
+                        modifier = Modifier.padding(start = HADimens.SPACE1),
                     )
-                    Switch(
-                        checked = viewModel.selectedShouldVibrate,
-                        onCheckedChange = { viewModel.selectedShouldVibrate = it },
-                        colors = SwitchDefaults.colors(
-                            uncheckedThumbColor = colorResource(R.color.colorSwitchUncheckedThumb),
-                        ),
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.tile_auth_required),
-                        fontSize = 15.sp,
-                    )
-                    Switch(
-                        checked = viewModel.tileAuthRequired,
-                        onCheckedChange = { viewModel.tileAuthRequired = it },
-                        colors = SwitchDefaults.colors(
-                            uncheckedThumbColor = colorResource(R.color.colorSwitchUncheckedThumb),
-                        ),
-                    )
-                }
-
-                Button(
-                    onClick = { viewModel.addTile() },
-                    enabled = viewModel.tileLabel.isNotBlank() &&
-                        viewModel.selectedServerId in viewModel.servers.map { it.id } &&
-                        viewModel.selectedEntityId in viewModel.sortedEntities.map { it.entityId },
-                ) {
-                    Text(stringResource(viewModel.submitButtonLabel))
                 }
             }
+
+            val vibrateLabel = stringResource(R.string.tile_vibrate)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = vibrateLabel,
+                    style = HATextStyle.BodyMedium,
+                    color = colorScheme.colorTextPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                HASwitch(
+                    checked = viewModel.selectedShouldVibrate,
+                    onCheckedChange = { viewModel.selectedShouldVibrate = it },
+                    modifier = Modifier.semantics { contentDescription = vibrateLabel },
+                )
+            }
+
+            val authRequiredLabel = stringResource(R.string.tile_auth_required)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = authRequiredLabel,
+                    style = HATextStyle.BodyMedium,
+                    color = colorScheme.colorTextPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                HASwitch(
+                    checked = viewModel.tileAuthRequired,
+                    onCheckedChange = { viewModel.tileAuthRequired = it },
+                    modifier = Modifier.semantics { contentDescription = authRequiredLabel },
+                )
+            }
+
+            HAFilledButton(
+                text = stringResource(viewModel.submitButtonLabel),
+                onClick = { viewModel.addTile() },
+                enabled = viewModel.tileLabel.isNotBlank() &&
+                    viewModel.selectedServerId in viewModel.servers.map { it.id } &&
+                    viewModel.selectedEntityId in viewModel.sortedEntities.map { it.entityId },
+                modifier = Modifier
+                    .padding(top = HADimens.SPACE6)
+                    .fillMaxWidth(),
+            )
         }
     }
 }

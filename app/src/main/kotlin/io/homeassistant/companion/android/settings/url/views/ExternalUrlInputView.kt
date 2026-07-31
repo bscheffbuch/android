@@ -1,17 +1,13 @@
 package io.homeassistant.companion.android.settings.url.views
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.Icon
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Text
-import androidx.compose.material.TextButton
-import androidx.compose.material.TextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,8 +23,12 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.composable.HAPlainButton
+import io.homeassistant.companion.android.common.compose.composable.HATextField
+import io.homeassistant.companion.android.common.compose.theme.HADimens
+import io.homeassistant.companion.android.common.compose.theme.HATextStyle
+import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -46,9 +46,9 @@ fun ExternalUrlInputView(
     var urlError by remember { mutableStateOf(false) }
 
     Column(
-        modifier = modifier.padding(horizontal = 16.dp),
+        modifier = modifier.padding(horizontal = HADimens.SPACE4),
     ) {
-        TextField(
+        HATextField(
             value = urlInput ?: "",
             singleLine = true,
             onValueChange = {
@@ -81,24 +81,22 @@ fun ExternalUrlInputView(
             } else {
                 null
             },
-            modifier = Modifier
-                .focusRequester(focusRequester)
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
+            supportingText = if (urlError) {
+                {
+                    Text(
+                        text = stringResource(commonR.string.url_parse_error),
+                        style = HATextStyle.BodyMedium.copy(color = LocalHAColorScheme.current.colorBorderDangerNormal),
+                    )
+                }
+            } else {
+                null
+            },
+            modifier = Modifier.focusRequester(focusRequester),
         )
 
-        if (urlError) {
-            Text(
-                text = stringResource(commonR.string.url_parse_error),
-                color = MaterialTheme.colors.error,
-                style = MaterialTheme.typography.caption,
-                modifier = Modifier.padding(start = 16.dp),
-            )
-        }
-
         if (urlInput != url && urlInput?.trim()?.toHttpUrlOrNull()?.toString() != url) {
-            TextButton(
-                modifier = Modifier.align(Alignment.End),
+            HAPlainButton(
+                text = stringResource(commonR.string.update),
                 onClick = {
                     urlError = !performUrlUpdate(urlInput?.trim(), url, onSaveUrl)
                     if (!urlError) {
@@ -106,9 +104,8 @@ fun ExternalUrlInputView(
                         focusManager.clearFocus()
                     }
                 },
-            ) {
-                Text(stringResource(commonR.string.update))
-            }
+                modifier = Modifier.align(Alignment.End).padding(top = HADimens.SPACE2),
+            )
         }
     }
 }

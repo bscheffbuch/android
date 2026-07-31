@@ -28,6 +28,7 @@ import io.homeassistant.companion.android.common.data.integration.impl.entities.
 import io.homeassistant.companion.android.common.data.integration.impl.entities.RegisterSensorIntegrationRequest
 import io.homeassistant.companion.android.common.data.integration.impl.entities.RenderTemplateIntegrationRequest
 import io.homeassistant.companion.android.common.data.integration.impl.entities.ScanTagIntegrationRequest
+import io.homeassistant.companion.android.common.data.integration.impl.entities.SceneConfigRequest
 import io.homeassistant.companion.android.common.data.integration.impl.entities.SensorRegistrationRequest
 import io.homeassistant.companion.android.common.data.integration.impl.entities.SensorUpdateRequest
 import io.homeassistant.companion.android.common.data.integration.impl.entities.Template
@@ -261,6 +262,26 @@ class IntegrationRepositoryImpl @AssistedInject constructor(
                 ),
             ),
         )
+    }
+
+    override suspend fun saveScene(sceneId: String, name: String, entities: Map<String, Any?>): Boolean {
+        val url = connectionStateProvider().urlFlow().firstUrlOrNull {
+            "Insecure state to save scene"
+        }?.toHttpUrlOrNull()
+        if (url == null) {
+            Timber.e("Unable to save scene due to missing URL")
+            return false
+        }
+
+        val response = integrationService.saveSceneConfig(
+            url.newBuilder().addPathSegments("api/config/scene/config/$sceneId").build(),
+            serverManager.authenticationRepository(serverId).buildBearerToken(),
+            SceneConfigRequest(name = name, entities = entities),
+        )
+        if (!response.isSuccessful) {
+            Timber.e("Failed to save scene sceneId=$sceneId code=${response.code()}")
+        }
+        return response.isSuccessful
     }
 
     override suspend fun scanTag(data: Map<String, String>) {

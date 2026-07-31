@@ -20,8 +20,8 @@ import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import io.homeassistant.companion.android.R
 import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.theme.HATheme
 import io.homeassistant.companion.android.settings.sensor.views.SensorListView
-import io.homeassistant.companion.android.util.compose.HomeAssistantAppTheme
 
 @AndroidEntryPoint
 class SensorSettingsFragment : Fragment() {
@@ -31,7 +31,7 @@ class SensorSettingsFragment : Fragment() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return ComposeView(requireContext()).apply {
             setContent {
-                HomeAssistantAppTheme {
+                HATheme {
                     SensorListView(
                         viewModel = viewModel,
                         onSensorClicked = { sensor ->

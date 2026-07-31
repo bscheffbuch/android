@@ -14,6 +14,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import java.time.LocalDateTime
+import kotlin.time.Clock
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -51,6 +52,8 @@ class AutomationsViewModelTest {
         lastUpdated = LocalDateTime.now(),
     )
 
+    private val sceneSaveError = "Couldn't save the scene. Your server may not allow editing scenes here."
+
     @Before
     fun setUp() {
         coEvery { server.id } returns 1
@@ -58,7 +61,7 @@ class AutomationsViewModelTest {
         coEvery { serverManager.integrationRepository(any()) } returns integrationRepository
 
         val context = ApplicationProvider.getApplicationContext<Context>()
-        viewModel = AutomationsViewModel(serverManager, context)
+        viewModel = AutomationsViewModel(serverManager, Clock.System, context)
     }
 
     private suspend fun TestScope.givenEntities(vararg entities: Entity) {
@@ -191,5 +194,92 @@ class AutomationsViewModelTest {
 
             assertEquals("Action failed. Please try again.", awaitItem())
         }
+    }
+
+    @Test
+    fun `Given entities of mixed domains when onCreateSceneClicked then only controllable candidates are offered`() = runTest {
+        coEvery { integrationRepository.getEntities() } returns listOf(
+            entity("light.kitchen", state = "on"),
+            entity("switch.fan", state = "off"),
+            entity("sensor.temperature", state = "21"),
+            entity("automation.morning_routine", state = "on"),
+        )
+
+        viewModel.onCreateSceneClicked()
+        advanceUntilIdle()
+
+        val state = viewModel.saveSceneDialogState.value
+        assertEquals(SaveSceneDialogUiState.Ready::class, state::class)
+        assertEquals(
+            setOf("light.kitchen", "switch.fan"),
+            (state as SaveSceneDialogUiState.Ready).candidates.map { it.entityId }.toSet(),
+        )
+    }
+
+    @Test
+    fun `Given a selected entity when saveScene succeeds then only that entity is saved and the dialog closes`() = runTest {
+        coEvery { integrationRepository.getEntities() } returns listOf(
+            entity("light.kitchen", state = "on"),
+            entity("switch.fan", state = "on"),
+        )
+        coEvery { integrationRepository.saveScene(any(), any(), any()) } returns true
+        viewModel.onCreateSceneClicked()
+        advanceUntilIdle()
+
+        viewModel.saveScene(name = "Movie", selectedEntityIds = setOf("light.kitchen"))
+        advanceUntilIdle()
+
+        coVerify {
+            integrationRepository.saveScene(
+                sceneId = any(),
+                name = "Movie",
+                entities = match { it.keys == setOf("light.kitchen") },
+            )
+        }
+        assertEquals(SaveSceneDialogUiState.Hidden, viewModel.saveSceneDialogState.value)
+    }
+
+    @Test
+    fun `Given the server rejects the scene when saveScene is called then an error is emitted and the dialog stays open`() = runTest {
+        coEvery { integrationRepository.getEntities() } returns listOf(entity("light.kitchen", state = "on"))
+        coEvery { integrationRepository.saveScene(any(), any(), any()) } returns false
+        viewModel.onCreateSceneClicked()
+        advanceUntilIdle()
+
+        viewModel.errorEvents.test {
+            viewModel.saveScene(name = "Movie", selectedEntityIds = setOf("light.kitchen"))
+            advanceUntilIdle()
+
+            assertEquals(sceneSaveError, awaitItem())
+        }
+
+        val state = viewModel.saveSceneDialogState.value
+        assertEquals(SaveSceneDialogUiState.Ready::class, state::class)
+        assertEquals(false, (state as SaveSceneDialogUiState.Ready).isSaving)
+    }
+
+    @Test
+    fun `Given the saved scene is missing from the first refetch when saveScene succeeds then polling surfaces it`() = runTest {
+        coEvery { integrationRepository.getEntities() } returns listOf(entity("light.kitchen", state = "on"))
+        coEvery { integrationRepository.saveScene(any(), any(), any()) } returns true
+        viewModel.onCreateSceneClicked()
+        advanceUntilIdle()
+
+        // Home Assistant hasn't finished reloading its scene platform on the first refetch, so the
+        // new scene only appears on the second — the poll must keep trying until it does.
+        coEvery { integrationRepository.getEntities() } returnsMany listOf(
+            listOf(entity("light.kitchen", state = "on")),
+            listOf(entity("light.kitchen", state = "on"), entity("scene.movie", state = "on")),
+        )
+
+        viewModel.saveScene(name = "Movie", selectedEntityIds = setOf("light.kitchen"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(AutomationsUiState.Success::class, state::class)
+        assertEquals(
+            listOf("scene.movie"),
+            (state as AutomationsUiState.Success).scenes.map { it.entityId },
+        )
     }
 }

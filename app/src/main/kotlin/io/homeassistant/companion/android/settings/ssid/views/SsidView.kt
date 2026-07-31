@@ -2,13 +2,13 @@ package io.homeassistant.companion.android.settings.ssid.views
 
 import android.net.wifi.WifiManager
 import android.os.Build
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -16,55 +16,51 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.Button
-import androidx.compose.material.Chip
-import androidx.compose.material.ContentAlpha
-import androidx.compose.material.Divider
-import androidx.compose.material.DropdownMenu
-import androidx.compose.material.DropdownMenuItem
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.Icon
-import androidx.compose.material.LocalContentAlpha
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Switch
-import androidx.compose.material.SwitchDefaults
-import androidx.compose.material.Text
-import androidx.compose.material.TextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.SettingsEthernet
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import com.mikepenz.iconics.compose.Image
-import com.mikepenz.iconics.typeface.library.community.material.CommunityMaterial
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.composable.HAAccentButton
+import io.homeassistant.companion.android.common.compose.composable.HADropdownItem
+import io.homeassistant.companion.android.common.compose.composable.HADropdownMenu
+import io.homeassistant.companion.android.common.compose.composable.HAHint
+import io.homeassistant.companion.android.common.compose.composable.HAHorizontalDivider
+import io.homeassistant.companion.android.common.compose.composable.HASwitch
+import io.homeassistant.companion.android.common.compose.composable.HATextField
+import io.homeassistant.companion.android.common.compose.theme.HADimens
+import io.homeassistant.companion.android.common.compose.theme.HARadius
+import io.homeassistant.companion.android.common.compose.theme.HATextStyle
+import io.homeassistant.companion.android.common.compose.theme.HAThemeForPreview
+import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import io.homeassistant.companion.android.common.data.network.WifiHelper
-import io.homeassistant.companion.android.util.compose.HaAlertInfo
 import io.homeassistant.companion.android.util.compose.HaAlertWarning
+import io.homeassistant.companion.android.util.compose.HomeAssistantAppTheme
 import io.homeassistant.companion.android.util.plus
 import io.homeassistant.companion.android.util.safeBottomPaddingValues
 
-@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun SsidView(
     wifiSsids: List<String>,
@@ -83,17 +79,20 @@ fun SsidView(
     onSetPrioritize: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colorScheme = LocalHAColorScheme.current
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(vertical = 16.dp) + safeBottomPaddingValues(applyHorizontal = false),
+        contentPadding = PaddingValues(vertical = HADimens.SPACE4) + safeBottomPaddingValues(applyHorizontal = false),
     ) {
         item("intro") {
             Column {
                 Text(
                     text = stringResource(commonR.string.manage_ssids_introduction),
+                    style = HATextStyle.Body.copy(textAlign = TextAlign.Start),
+                    color = colorScheme.colorTextPrimary,
                     modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 16.dp),
+                        .padding(horizontal = HADimens.SPACE4)
+                        .padding(bottom = HADimens.SPACE4),
                 )
                 SsidSubheader(
                     title = stringResource(commonR.string.manage_ssids_wifi),
@@ -104,12 +103,14 @@ fun SsidView(
                 if (canReadWifi) {
                     SsidInput(onAddWifiSsid)
                 } else {
-                    Box(Modifier.padding(horizontal = 16.dp)) {
-                        HaAlertWarning(
-                            message = stringResource(commonR.string.manage_ssids_permission),
-                            action = stringResource(commonR.string.allow),
-                            onActionClicked = onRequestPermission,
-                        )
+                    Box(Modifier.padding(horizontal = HADimens.SPACE4)) {
+                        HomeAssistantAppTheme {
+                            HaAlertWarning(
+                                message = stringResource(commonR.string.manage_ssids_permission),
+                                action = stringResource(commonR.string.allow),
+                                onActionClicked = onRequestPermission,
+                            )
+                        }
                     }
                 }
             }
@@ -121,20 +122,11 @@ fun SsidView(
             (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || activeSsid !== WifiManager.UNKNOWN_SSID)
         ) {
             item("ssid.suggestion") {
-                Chip(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                SsidSuggestionChip(
+                    label = stringResource(commonR.string.add_ssid_name_suggestion, activeSsid),
                     onClick = { onAddWifiSsid(activeSsid) },
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Wifi,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text(
-                        text = stringResource(commonR.string.add_ssid_name_suggestion, activeSsid),
-                        modifier = Modifier.padding(start = 8.dp),
-                    )
-                }
+                    modifier = Modifier.padding(horizontal = HADimens.SPACE4, vertical = HADimens.SPACE2),
+                )
             }
         }
         itemsIndexed(
@@ -155,17 +147,18 @@ fun SsidView(
             }
             Row(
                 modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .padding(horizontal = 16.dp)
+                    .heightIn(min = HADimens.SPACE12)
+                    .padding(horizontal = HADimens.SPACE4)
                     .animateItem(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (connected) {
-                    Image(
-                        asset = CommunityMaterial.Icon3.cmd_wifi_check,
-                        colorFilter = ColorFilter.tint(colorResource(commonR.color.colorAccent)),
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = colorScheme.colorFillPrimaryLoudResting,
                     )
-                    Spacer(Modifier.width(16.dp))
+                    Spacer(Modifier.width(HADimens.SPACE4))
                 }
                 Text(
                     text =
@@ -180,18 +173,20 @@ fun SsidView(
                     } else {
                         null
                     },
+                    style = HATextStyle.Body.copy(textAlign = TextAlign.Start),
+                    color = colorScheme.colorTextPrimary,
                     modifier = Modifier
-                        .padding(end = 16.dp)
+                        .padding(end = HADimens.SPACE4)
                         .weight(1f),
                 )
                 Icon(
                     imageVector = Icons.Default.Clear,
                     contentDescription = stringResource(commonR.string.remove_ssid),
-                    tint = colorResource(commonR.color.colorWarning),
+                    tint = colorScheme.colorOnDangerNormal,
                     modifier = Modifier
                         .clickable { onRemoveWifiSsid(it) }
-                        .size(48.dp)
-                        .padding(all = 12.dp),
+                        .size(HADimens.SPACE12)
+                        .padding(all = HADimens.SPACE3),
                 )
             }
         }
@@ -207,7 +202,7 @@ fun SsidView(
 
         item("ethernet") {
             Column {
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(HADimens.SPACE4))
                 SsidSubheader(
                     title = stringResource(commonR.string.manage_ssids_ethernet),
                     icon = Icons.Default.SettingsEthernet,
@@ -221,27 +216,33 @@ fun SsidView(
             item("warn") {
                 Box(
                     Modifier
-                        .padding(horizontal = 16.dp)
-                        .padding(top = 32.dp)
+                        .padding(horizontal = HADimens.SPACE4)
+                        .padding(top = HADimens.SPACE8)
                         .animateItem(),
                 ) {
-                    HaAlertInfo(
-                        message = stringResource(commonR.string.manage_ssids_warning),
-                        action = null,
-                        onActionClicked = null,
-                    )
+                    HAHint(text = stringResource(commonR.string.manage_ssids_warning))
                 }
             }
         }
 
         item("prioritize") {
             Column {
-                Spacer(modifier = Modifier.height(48.dp))
-                Divider(modifier = Modifier.padding(horizontal = 16.dp))
-                SsidPrioritizeInternal(
-                    prioritize = prioritizeInternal,
-                    onChanged = onSetPrioritize,
-                )
+                Spacer(modifier = Modifier.height(HADimens.SPACE12))
+                HAHorizontalDivider(modifier = Modifier.padding(horizontal = HADimens.SPACE4))
+                Box(modifier = Modifier.padding(all = HADimens.SPACE4)) {
+                    HADropdownMenu(
+                        items = listOf(
+                            HADropdownItem(key = false, label = stringResource(commonR.string.prioritize_internal_off)),
+                            HADropdownItem(
+                                key = true,
+                                label = stringResource(commonR.string.prioritize_internal_on_expanded),
+                            ),
+                        ),
+                        selectedKey = prioritizeInternal,
+                        onItemSelected = onSetPrioritize,
+                        label = stringResource(commonR.string.prioritize_internal_title),
+                    )
+                }
             }
         }
     }
@@ -255,40 +256,28 @@ fun SsidSubheader(
     onClicked: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
-    val subheaderModifier = if (onClicked != null) {
-        modifier.then(
-            Modifier
-                .clickable { checked?.let { onClicked(!it) } ?: onClicked(true) }
-                .heightIn(min = 56.dp)
-                .padding(horizontal = 16.dp),
-        )
-    } else {
-        modifier.then(
-            Modifier
-                .heightIn(min = 56.dp)
-                .padding(horizontal = 16.dp),
-        )
-    }
+    val colorScheme = LocalHAColorScheme.current
     Row(
-        modifier = subheaderModifier,
+        modifier = modifier
+            .heightIn(min = HADimens.SPACE14)
+            .padding(horizontal = HADimens.SPACE4),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
+            tint = colorScheme.colorTextPrimary,
         )
         Text(
             text = title,
-            modifier = Modifier.padding(start = 16.dp).weight(1f),
-            style = MaterialTheme.typography.subtitle1,
+            style = HATextStyle.Body.copy(textAlign = TextAlign.Start),
+            color = colorScheme.colorTextPrimary,
+            modifier = Modifier.padding(start = HADimens.SPACE4).weight(1f),
         )
         if (onClicked != null) {
-            Switch(
+            HASwitch(
                 checked = checked == true,
-                onCheckedChange = null,
-                colors = SwitchDefaults.colors(
-                    uncheckedThumbColor = colorResource(commonR.color.colorSwitchUncheckedThumb),
-                ),
+                onCheckedChange = onClicked,
             )
         }
     }
@@ -297,11 +286,11 @@ fun SsidSubheader(
 @Composable
 fun SsidInput(onSubmit: (String) -> Boolean, modifier: Modifier = Modifier) {
     val keyboardController = LocalSoftwareKeyboardController.current
-    Row(modifier = modifier.padding(horizontal = 16.dp)) {
+    Row(modifier = modifier.padding(horizontal = HADimens.SPACE4)) {
         var ssidInput by remember { mutableStateOf("") }
         var ssidError by remember { mutableStateOf(false) }
 
-        TextField(
+        HATextField(
             value = ssidInput,
             singleLine = true,
             onValueChange = {
@@ -330,109 +319,87 @@ fun SsidInput(onSubmit: (String) -> Boolean, modifier: Modifier = Modifier) {
             },
             modifier = Modifier.weight(1f),
         )
-        Button(
-            modifier = Modifier
-                .height(56.dp) // align with TextField: 56
-                .padding(start = 8.dp, top = 0.dp),
+        HAAccentButton(
+            text = stringResource(commonR.string.add_ssid),
             onClick = {
                 keyboardController?.hide()
                 ssidError = !onSubmit(ssidInput)
                 if (!ssidError) ssidInput = ""
             },
-        ) {
-            Text(stringResource(commonR.string.add_ssid))
-        }
+            modifier = Modifier
+                .height(HADimens.SPACE14) // align with HATextField
+                .padding(start = HADimens.SPACE2),
+        )
     }
 }
 
 @Composable
-fun SsidPrioritizeInternal(prioritize: Boolean, onChanged: (Boolean) -> Unit, modifier: Modifier = Modifier) {
-    var prioritizeDropdown by remember { mutableStateOf(false) }
-    Box(modifier = modifier) {
-        Column(
-            modifier = Modifier
-                .clickable { prioritizeDropdown = true }
-                .fillMaxWidth()
-                .padding(all = 16.dp),
-        ) {
-            Text(
-                text = stringResource(commonR.string.prioritize_internal_title),
-                style = MaterialTheme.typography.body1,
-            )
-            CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
-                Text(
-                    text = stringResource(
-                        if (prioritize) {
-                            commonR.string.prioritize_internal_on
-                        } else {
-                            commonR.string.prioritize_internal_off
-                        },
-                    ),
-                    style = MaterialTheme.typography.body2,
-                )
-            }
-        }
-        if (prioritizeDropdown) {
-            DropdownMenu(
-                expanded = true,
-                onDismissRequest = { prioritizeDropdown = false },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                DropdownMenuItem(onClick = {
-                    onChanged(false)
-                    prioritizeDropdown = false
-                }) {
-                    Text(stringResource(commonR.string.prioritize_internal_off))
-                }
-                DropdownMenuItem(onClick = {
-                    onChanged(true)
-                    prioritizeDropdown = false
-                }) {
-                    Text(stringResource(commonR.string.prioritize_internal_on_expanded))
-                }
-            }
-        }
+private fun SsidSuggestionChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val colorScheme = LocalHAColorScheme.current
+    Row(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .background(color = colorScheme.colorFillNeutralQuietResting, shape = RoundedCornerShape(HARadius.Pill))
+            .padding(horizontal = HADimens.SPACE4, vertical = HADimens.SPACE2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Default.Wifi,
+            contentDescription = null,
+            tint = colorScheme.colorTextPrimary,
+            modifier = Modifier.size(HADimens.SPACE5),
+        )
+        Text(
+            text = label,
+            style = HATextStyle.BodyMedium,
+            color = colorScheme.colorTextPrimary,
+            modifier = Modifier.padding(start = HADimens.SPACE2),
+        )
     }
 }
 
-@Preview
+@PreviewLightDark
 @Composable
 private fun PreviewSsidViewEmpty() {
-    SsidView(
-        wifiSsids = emptyList(),
-        canReadWifi = true,
-        ethernet = null,
-        vpn = null,
-        prioritizeInternal = false,
-        activeSsid = "home-assistant-wifi",
-        activeBssid = "02:00:00:00:00:00",
-        usingWifi = true,
-        onAddWifiSsid = { true },
-        onRemoveWifiSsid = {},
-        onRequestPermission = {},
-        onSetEthernet = {},
-        onSetVpn = {},
-        onSetPrioritize = {},
-    )
+    HAThemeForPreview {
+        SsidView(
+            wifiSsids = emptyList(),
+            canReadWifi = true,
+            ethernet = null,
+            vpn = null,
+            prioritizeInternal = false,
+            activeSsid = "home-assistant-wifi",
+            activeBssid = "02:00:00:00:00:00",
+            usingWifi = true,
+            onAddWifiSsid = { true },
+            onRemoveWifiSsid = {},
+            onRequestPermission = {},
+            onSetEthernet = {},
+            onSetVpn = {},
+            onSetPrioritize = {},
+        )
+    }
 }
 
-@Preview
+@PreviewLightDark
 @Composable
 private fun PreviewSsidViewItems() {
-    SsidView(
-        wifiSsids = listOf("home-assistant-wifi", "wifi-one", "BSSID:1A:2B:3C:4D:5E:6F"),
-        canReadWifi = true,
-        ethernet = false,
-        vpn = true,
-        prioritizeInternal = false,
-        activeSsid = "home-assistant-wifi",
-        activeBssid = "02:00:00:00:00:00",
-        usingWifi = true,
-        onAddWifiSsid = { true },
-        onRemoveWifiSsid = {},
-        onRequestPermission = {},
-        onSetEthernet = {},
-        onSetVpn = {},
-        onSetPrioritize = {},
-    )
+    HAThemeForPreview {
+        SsidView(
+            wifiSsids = listOf("home-assistant-wifi", "wifi-one", "BSSID:1A:2B:3C:4D:5E:6F"),
+            canReadWifi = true,
+            ethernet = false,
+            vpn = true,
+            prioritizeInternal = false,
+            activeSsid = "home-assistant-wifi",
+            activeBssid = "02:00:00:00:00:00",
+            usingWifi = true,
+            onAddWifiSsid = { true },
+            onRemoveWifiSsid = {},
+            onRequestPermission = {},
+            onSetEthernet = {},
+            onSetVpn = {},
+            onSetPrioritize = {},
+        )
+    }
 }

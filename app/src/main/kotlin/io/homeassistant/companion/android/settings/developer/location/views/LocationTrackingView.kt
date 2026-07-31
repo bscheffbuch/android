@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,17 +19,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.ContentAlpha
-import androidx.compose.material.IconButton
-import androidx.compose.material.LocalContentAlpha
-import androidx.compose.material.LocalContentColor
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Surface
-import androidx.compose.material.Switch
-import androidx.compose.material.SwitchDefaults
-import androidx.compose.material.Text
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,10 +32,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.core.app.ShareCompat
@@ -54,11 +46,18 @@ import androidx.paging.compose.itemKey
 import com.mikepenz.iconics.compose.Image
 import com.mikepenz.iconics.typeface.library.community.material.CommunityMaterial
 import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.composable.HASettingsCard
+import io.homeassistant.companion.android.common.compose.composable.HASwitch
+import io.homeassistant.companion.android.common.compose.theme.HADimens
+import io.homeassistant.companion.android.common.compose.theme.HARadius
+import io.homeassistant.companion.android.common.compose.theme.HATextStyle
+import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import io.homeassistant.companion.android.database.location.LocationHistoryItem
 import io.homeassistant.companion.android.database.location.LocationHistoryItemResult
 import io.homeassistant.companion.android.database.location.LocationHistoryItemTrigger
 import io.homeassistant.companion.android.database.server.Server
 import io.homeassistant.companion.android.settings.views.EmptyState
+import io.homeassistant.companion.android.util.compose.HomeAssistantAppTheme
 import io.homeassistant.companion.android.util.safeBottomPaddingValues
 import java.text.DateFormat
 import java.util.TimeZone
@@ -79,53 +78,51 @@ fun LocationTrackingView(
         contentPadding = safeBottomPaddingValues(applyHorizontal = false),
     ) {
         item("history.use") {
-            Box(Modifier.padding(all = 16.dp)) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = colorResource(commonR.color.colorSensorTopEnabled),
-                ) {
-                    Row(
+            HASettingsCard(
+                modifier = Modifier
+                    .padding(all = HADimens.SPACE4)
+                    .clickable { onSetHistory(!useHistory) },
+            ) {
+                val historyUseLabel = stringResource(commonR.string.location_history_use)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = historyUseLabel,
+                        style = HATextStyle.Body,
+                        color = LocalHAColorScheme.current.colorTextPrimary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    HASwitch(
+                        checked = useHistory,
+                        // Handled by row
+                        onCheckedChange = {},
                         modifier = Modifier
-                            .clickable { onSetHistory(!useHistory) }
-                            .padding(horizontal = 16.dp, vertical = 20.dp),
-                    ) {
-                        Text(
-                            text = stringResource(commonR.string.location_history_use),
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Switch(
-                            checked = useHistory,
-                            // Handled by row
-                            onCheckedChange = null,
-                            modifier = Modifier.padding(start = 16.dp),
-                            colors = SwitchDefaults.colors(
-                                uncheckedThumbColor = colorResource(commonR.color.colorSwitchUncheckedThumb),
-                            ),
-                        )
-                    }
+                            .padding(start = HADimens.SPACE4)
+                            .semantics { contentDescription = historyUseLabel },
+                    )
                 }
             }
         }
         if (!useHistory || (historyState.loadState.refresh !is LoadState.Loading && historyState.itemCount == 0)) {
             item("history.empty") {
-                EmptyState(
-                    icon = CommunityMaterial.Icon3.cmd_map_marker_path,
-                    title = stringResource(
-                        if (useHistory) {
-                            commonR.string.location_history_empty_title
-                        } else {
-                            commonR.string.location_history_off_title
-                        },
-                    ),
-                    subtitle = stringResource(
-                        if (useHistory) {
-                            commonR.string.location_history_empty_summary
-                        } else {
-                            commonR.string.location_history_off_summary
-                        },
-                    ),
-                )
+                HomeAssistantAppTheme {
+                    EmptyState(
+                        icon = CommunityMaterial.Icon3.cmd_map_marker_path,
+                        title = stringResource(
+                            if (useHistory) {
+                                commonR.string.location_history_empty_title
+                            } else {
+                                commonR.string.location_history_off_title
+                            },
+                        ),
+                        subtitle = stringResource(
+                            if (useHistory) {
+                                commonR.string.location_history_empty_summary
+                            } else {
+                                commonR.string.location_history_off_summary
+                            },
+                        ),
+                    )
+                }
             }
         } else {
             items(
@@ -141,7 +138,11 @@ fun LocationTrackingView(
 @Composable
 fun LocationTrackingHistoryRow(item: LocationHistoryItem?, servers: List<Server>, modifier: Modifier = Modifier) {
     var opened by rememberSaveable { mutableStateOf(false) }
-    val elevation by animateDpAsState(if (opened) 8.dp else 0.dp, label = "HistoryRow elevation")
+    val colorScheme = LocalHAColorScheme.current
+    val cornerRadius by animateDpAsState(
+        if (opened) HARadius.XL else HARadius.Square,
+        label = "HistoryRow corner radius",
+    )
     val date by remember(item?.id) {
         mutableStateOf(
             item?.created?.let {
@@ -152,132 +153,126 @@ fun LocationTrackingHistoryRow(item: LocationHistoryItem?, servers: List<Server>
         )
     }
 
-    Box(modifier.zIndex(if (opened) 1f else 0f)) {
-        Surface(
-            shape = RoundedCornerShape(elevation),
-            color = if (opened) MaterialTheme.colors.surface else MaterialTheme.colors.background,
-            elevation = elevation,
-        ) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { opened = !opened }
-                    .animateContentSize(),
-            ) {
-                ReadOnlyRow(
-                    primarySlot = {
+    Column(
+        modifier
+            .zIndex(if (opened) 1f else 0f)
+            .fillMaxWidth()
+            .background(
+                if (opened) colorScheme.colorSurfaceLow else colorScheme.colorSurfaceDefault,
+                RoundedCornerShape(cornerRadius),
+            )
+            .clickable { opened = !opened }
+            .animateContentSize(),
+    ) {
+        ReadOnlyRow(
+            primarySlot = {
+                Text(text = date ?: "", style = HATextStyle.Body, color = colorScheme.colorTextPrimary)
+            },
+            secondarySlot = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    item?.let {
+                        val sent = it.result == LocationHistoryItemResult.SENT
+                        val failed = it.result == LocationHistoryItemResult.FAILED_SEND
                         Text(
-                            text = date ?: "",
-                            style = MaterialTheme.typography.body1,
+                            text = "${stringResource(
+                                item.trigger.toStringResource(),
+                            )} • ${stringResource(it.result.toStringResource())}",
+                            style = HATextStyle.BodyMedium,
+                            color = colorScheme.colorTextSecondary,
+                            modifier = Modifier.padding(end = HADimens.SPACE1),
                         )
-                    },
-                    secondarySlot = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            item?.let {
-                                val sent = it.result == LocationHistoryItemResult.SENT
-                                val failed = it.result == LocationHistoryItemResult.FAILED_SEND
-                                Text(
-                                    text = "${stringResource(
-                                        item.trigger.toStringResource(),
-                                    )} • ${stringResource(it.result.toStringResource())}",
-                                    style = MaterialTheme.typography.body2,
-                                    modifier = Modifier.padding(end = 4.dp),
-                                )
-                                Image(
-                                    asset = when {
-                                        sent -> CommunityMaterial.Icon.cmd_check
-                                        failed -> CommunityMaterial.Icon.cmd_alert_outline
-                                        else -> CommunityMaterial.Icon.cmd_debug_step_over
-                                    },
-                                    contentDescription = if (sent ||
-                                        failed
-                                    ) {
-                                        null
-                                    } else {
-                                        stringResource(commonR.string.location_history_skipped)
-                                    },
-                                    colorFilter = ColorFilter.tint(
-                                        when {
-                                            sent -> colorResource(commonR.color.colorOnAlertSuccess)
-                                            failed -> colorResource(commonR.color.colorOnAlertWarning)
-                                            else -> LocalContentColor.current
-                                        },
-                                    ),
-                                    alpha = if (sent || failed) 1.0f else LocalContentAlpha.current,
-                                    modifier = Modifier.size(with(LocalDensity.current) { 16.sp.toDp() }),
-                                )
-                            }
-                        }
-                    },
-                )
-                AnimatedVisibility(visible = opened) {
-                    val context = LocalContext.current
-                    val serverName by remember {
-                        mutableStateOf(
-                            if (item?.serverId != null) {
-                                servers.firstOrNull { it.id == item.serverId }?.friendlyName
-                            } else {
-                                "-"
+                        Image(
+                            asset = when {
+                                sent -> CommunityMaterial.Icon.cmd_check
+                                failed -> CommunityMaterial.Icon.cmd_alert_outline
+                                else -> CommunityMaterial.Icon.cmd_debug_step_over
                             },
+                            contentDescription = if (sent ||
+                                failed
+                            ) {
+                                null
+                            } else {
+                                stringResource(commonR.string.location_history_skipped)
+                            },
+                            colorFilter = ColorFilter.tint(
+                                when {
+                                    sent -> colorScheme.colorOnSuccessNormal
+                                    failed -> colorScheme.colorOnWarningNormal
+                                    else -> colorScheme.colorTextSecondary
+                                },
+                            ),
+                            modifier = Modifier.size(with(LocalDensity.current) { 16.sp.toDp() }),
                         )
                     }
-                    Column {
-                        ReadOnlyRow(
-                            primaryText = stringResource(commonR.string.location),
-                            secondaryText = (item?.locationName ?: "${item?.latitude}, ${item?.longitude}"),
-                        )
-                        ReadOnlyRow(
-                            primaryText = stringResource(commonR.string.accuracy),
-                            secondaryText = item?.accuracy.toString(),
-                        )
-                        if (servers.size > 1 || serverName == null) { // null serverName suggests deleted server
-                            ReadOnlyRow(
-                                primaryText = stringResource(commonR.string.server),
-                                secondaryText = serverName ?: stringResource(commonR.string.state_unknown),
+                }
+            },
+        )
+        AnimatedVisibility(visible = opened) {
+            val context = LocalContext.current
+            val serverName by remember {
+                mutableStateOf(
+                    if (item?.serverId != null) {
+                        servers.firstOrNull { it.id == item.serverId }?.friendlyName
+                    } else {
+                        "-"
+                    },
+                )
+            }
+            Column {
+                ReadOnlyRow(
+                    primaryText = stringResource(commonR.string.location),
+                    secondaryText = (item?.locationName ?: "${item?.latitude}, ${item?.longitude}"),
+                )
+                ReadOnlyRow(
+                    primaryText = stringResource(commonR.string.accuracy),
+                    secondaryText = item?.accuracy.toString(),
+                )
+                if (servers.size > 1 || serverName == null) { // null serverName suggests deleted server
+                    ReadOnlyRow(
+                        primaryText = stringResource(commonR.string.server),
+                        secondaryText = serverName ?: stringResource(commonR.string.state_unknown),
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .padding(horizontal = HADimens.SPACE4)
+                        .padding(bottom = HADimens.SPACE2),
+                ) {
+                    if (item?.latitude != null && item.longitude != null) {
+                        IconButton(
+                            onClick = {
+                                val latlng = "${item.latitude},${item.longitude}"
+                                context.startActivity(
+                                    Intent(
+                                        Intent.ACTION_VIEW,
+                                        "geo:$latlng?q=$latlng(Home+Assistant)".toUri(),
+                                    ),
+                                )
+                            },
+                        ) {
+                            Image(
+                                asset = CommunityMaterial.Icon3.cmd_map,
+                                contentDescription = stringResource(commonR.string.show_on_map),
+                                modifier = Modifier.size(HADimens.SPACE6),
+                                colorFilter = ColorFilter.tint(colorScheme.colorFillPrimaryLoudResting),
                             )
                         }
-                        Row(
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .padding(bottom = 8.dp),
-                        ) {
-                            if (item?.latitude != null && item.longitude != null) {
-                                IconButton(
-                                    onClick = {
-                                        val latlng = "${item.latitude},${item.longitude}"
-                                        context.startActivity(
-                                            Intent(
-                                                Intent.ACTION_VIEW,
-                                                "geo:$latlng?q=$latlng(Home+Assistant)".toUri(),
-                                            ),
-                                        )
-                                    },
-                                ) {
-                                    Image(
-                                        asset = CommunityMaterial.Icon3.cmd_map,
-                                        contentDescription = stringResource(commonR.string.show_on_map),
-                                        modifier = Modifier.size(24.dp),
-                                        colorFilter = ColorFilter.tint(MaterialTheme.colors.primary),
-                                    )
-                                }
-                                Spacer(Modifier.width(16.dp))
-                            }
-                            IconButton(
-                                onClick = {
-                                    ShareCompat.IntentBuilder(context)
-                                        .setText(item?.toSharingString(serverName) ?: "")
-                                        .setType("text/plain")
-                                        .startChooser()
-                                },
-                            ) {
-                                Image(
-                                    asset = CommunityMaterial.Icon3.cmd_share_variant,
-                                    contentDescription = stringResource(commonR.string.share_logs),
-                                    modifier = Modifier.size(24.dp),
-                                    colorFilter = ColorFilter.tint(MaterialTheme.colors.primary),
-                                )
-                            }
-                        }
+                        Spacer(Modifier.width(HADimens.SPACE4))
+                    }
+                    IconButton(
+                        onClick = {
+                            ShareCompat.IntentBuilder(context)
+                                .setText(item?.toSharingString(serverName) ?: "")
+                                .setType("text/plain")
+                                .startChooser()
+                        },
+                    ) {
+                        Image(
+                            asset = CommunityMaterial.Icon3.cmd_share_variant,
+                            contentDescription = stringResource(commonR.string.share_logs),
+                            modifier = Modifier.size(HADimens.SPACE6),
+                            colorFilter = ColorFilter.tint(colorScheme.colorFillPrimaryLoudResting),
+                        )
                     }
                 }
             }
@@ -292,12 +287,21 @@ fun ReadOnlyRow(
     modifier: Modifier = Modifier,
     selectingEnabled: Boolean = true,
 ) = ReadOnlyRow(
-    primarySlot = { Text(text = primaryText, style = MaterialTheme.typography.body1) },
+    primarySlot = {
+        Text(text = primaryText, style = HATextStyle.Body, color = LocalHAColorScheme.current.colorTextPrimary)
+    },
     secondarySlot = {
+        val secondaryContent: @Composable () -> Unit = {
+            Text(
+                text = secondaryText,
+                style = HATextStyle.BodyMedium,
+                color = LocalHAColorScheme.current.colorTextSecondary,
+            )
+        }
         if (selectingEnabled) {
-            SelectionContainer { Text(text = secondaryText, style = MaterialTheme.typography.body2) }
+            SelectionContainer { secondaryContent() }
         } else {
-            Text(text = secondaryText, style = MaterialTheme.typography.body2)
+            secondaryContent()
         }
     },
     modifier = modifier,
@@ -309,14 +313,14 @@ fun ReadOnlyRow(
     secondarySlot: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .heightIn(min = 56.dp)
-            .padding(all = 16.dp),
-        verticalArrangement = Arrangement.Center,
-    ) {
-        primarySlot()
-        CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+    Box(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .heightIn(min = HADimens.SPACE14)
+                .padding(all = HADimens.SPACE4),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            primarySlot()
             secondarySlot()
         }
     }

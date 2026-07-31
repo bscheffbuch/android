@@ -1,26 +1,34 @@
 package io.homeassistant.companion.android.settings.url.views
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.Switch
-import androidx.compose.material.SwitchDefaults
-import androidx.compose.material.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.composable.HASettingsCard
+import io.homeassistant.companion.android.common.compose.composable.HASwitch
+import io.homeassistant.companion.android.common.compose.theme.HADimens
+import io.homeassistant.companion.android.common.compose.theme.HARadius
+import io.homeassistant.companion.android.common.compose.theme.HATextStyle
+import io.homeassistant.companion.android.common.compose.theme.HAThemeForPreview
+import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import io.homeassistant.companion.android.util.safeBottomPaddingValues
 
 @Composable
@@ -37,14 +45,15 @@ fun ExternalUrlView(
     Column(
         modifier = modifier
             .padding(safeBottomPaddingValues(applyHorizontal = false))
-            .padding(vertical = 16.dp),
+            .padding(vertical = HADimens.SPACE4),
     ) {
         if (canUseCloud) {
             ExternalUrlCloudView(
                 useCloud = useCloud,
                 onUseCloudToggle = onUseCloudToggle,
+                modifier = Modifier.padding(horizontal = HADimens.SPACE4),
             )
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(HADimens.SPACE6))
         }
 
         if (!canUseCloud || !useCloud) {
@@ -63,61 +72,71 @@ fun ExternalUrlView(
 
 @Composable
 fun ExternalUrlCloudView(useCloud: Boolean, onUseCloudToggle: (Boolean) -> Unit, modifier: Modifier = Modifier) {
-    Row(
+    val colorScheme = LocalHAColorScheme.current
+
+    HASettingsCard(
         modifier = modifier
-            .clickable { onUseCloudToggle(!useCloud) }
-            .heightIn(min = 56.dp)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clip(RoundedCornerShape(HARadius.XL))
+            .clickable(role = Role.Switch) { onUseCloudToggle(!useCloud) },
     ) {
-        Text(
-            text = stringResource(commonR.string.input_cloud),
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 16.dp),
-        )
-        Switch(
-            checked = useCloud,
-            onCheckedChange = null,
-            colors = SwitchDefaults.colors(
-                uncheckedThumbColor = colorResource(commonR.color.colorSwitchUncheckedThumb),
-            ),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(commonR.string.input_cloud),
+                style = HATextStyle.Body,
+                color = colorScheme.colorTextPrimary,
+                textAlign = TextAlign.Start,
+                modifier = Modifier.weight(1f),
+            )
+            HASwitch(
+                checked = useCloud,
+                onCheckedChange = onUseCloudToggle,
+            )
+        }
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewExternalUrlViewCloudOn() {
+    HAThemeForPreview {
+        ExternalUrlView(
+            canUseCloud = true,
+            useCloud = true,
+            externalUrl = "https://home.example.com:8123/",
+            onUseCloudToggle = {},
+            onExternalUrlSaved = {},
         )
     }
 }
 
 @Preview
 @Composable
-fun PreviewExternalUrlViewCloudOn() {
-    ExternalUrlView(
-        canUseCloud = true,
-        useCloud = true,
-        externalUrl = "https://home.example.com:8123/",
-        onUseCloudToggle = {},
-        onExternalUrlSaved = {},
-    )
+private fun PreviewExternalUrlViewCloudOff() {
+    HAThemeForPreview {
+        ExternalUrlView(
+            canUseCloud = true,
+            useCloud = false,
+            externalUrl = "https://home.example.com:8123/",
+            onUseCloudToggle = {},
+            onExternalUrlSaved = {},
+        )
+    }
 }
 
 @Preview
 @Composable
-fun PreviewExternalUrlViewCloudOff() {
-    ExternalUrlView(
-        canUseCloud = true,
-        useCloud = false,
-        externalUrl = "https://home.example.com:8123/",
-        onUseCloudToggle = {},
-        onExternalUrlSaved = {},
-    )
-}
-
-@Preview
-@Composable
-fun PreviewExternalUrlViewCloudNone() {
-    ExternalUrlView(
-        canUseCloud = false,
-        useCloud = false,
-        externalUrl = "https://home.example.com:8123/",
-        onUseCloudToggle = {},
-        onExternalUrlSaved = {},
-    )
+private fun PreviewExternalUrlViewCloudNone() {
+    HAThemeForPreview {
+        ExternalUrlView(
+            canUseCloud = false,
+            useCloud = false,
+            externalUrl = "https://home.example.com:8123/",
+            onUseCloudToggle = {},
+            onExternalUrlSaved = {},
+        )
+    }
 }

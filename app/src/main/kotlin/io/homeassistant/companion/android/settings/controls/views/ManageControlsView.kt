@@ -17,22 +17,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.Button
-import androidx.compose.material.Checkbox
-import androidx.compose.material.CircularProgressIndicator
-import androidx.compose.material.ContentAlpha
-import androidx.compose.material.Divider
-import androidx.compose.material.LocalContentAlpha
-import androidx.compose.material.LocalContentColor
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.OutlinedButton
-import androidx.compose.material.RadioButton
-import androidx.compose.material.Switch
-import androidx.compose.material.SwitchDefaults
-import androidx.compose.material.Text
-import androidx.compose.material.TextField
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxColors
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonColors
+import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -41,26 +32,36 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.mikepenz.iconics.compose.Image
 import com.mikepenz.iconics.typeface.library.community.material.CommunityMaterial
 import io.homeassistant.companion.android.common.R
 import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.composable.ButtonVariant
+import io.homeassistant.companion.android.common.compose.composable.HAAccentButton
+import io.homeassistant.companion.android.common.compose.composable.HADropdownItem
+import io.homeassistant.companion.android.common.compose.composable.HADropdownMenu
+import io.homeassistant.companion.android.common.compose.composable.HAFilledButton
+import io.homeassistant.companion.android.common.compose.composable.HALoading
+import io.homeassistant.companion.android.common.compose.composable.HASwitch
+import io.homeassistant.companion.android.common.compose.composable.HATextField
+import io.homeassistant.companion.android.common.compose.theme.HABorderWidth
+import io.homeassistant.companion.android.common.compose.theme.HADimens
+import io.homeassistant.companion.android.common.compose.theme.HATextStyle
+import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import io.homeassistant.companion.android.common.data.integration.ControlsAuthRequiredSetting
 import io.homeassistant.companion.android.common.data.integration.Entity
 import io.homeassistant.companion.android.common.data.integration.friendlyName
 import io.homeassistant.companion.android.database.server.Server
 import io.homeassistant.companion.android.util.compose.HaAlertWarning
-import io.homeassistant.companion.android.util.compose.ServerExposedDropdownMenu
+import io.homeassistant.companion.android.util.compose.HomeAssistantAppTheme
 import io.homeassistant.companion.android.util.compose.getEntityDomainString
 import io.homeassistant.companion.android.util.plus
 import io.homeassistant.companion.android.util.safeBottomPaddingValues
@@ -91,20 +92,22 @@ fun ManageControlsView(
 
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(vertical = 16.dp) + safeBottomPaddingValues(applyHorizontal = false),
+        contentPadding = PaddingValues(vertical = HADimens.SPACE4) + safeBottomPaddingValues(applyHorizontal = false),
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             item {
                 Text(
                     text = stringResource(commonR.string.controls_setting_panel),
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    style = HATextStyle.BodyMedium.copy(textAlign = TextAlign.Start),
+                    color = LocalHAColorScheme.current.colorTextSecondary,
+                    modifier = Modifier.padding(horizontal = HADimens.SPACE4),
                 )
             }
             item {
                 Row(
                     modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .padding(top = 16.dp, bottom = 48.dp)
+                        .padding(horizontal = HADimens.SPACE4)
+                        .padding(top = HADimens.SPACE4, bottom = HADimens.SPACE12)
                         .height(IntrinsicSize.Min),
                 ) {
                     ManageControlsModeButton(
@@ -113,10 +116,11 @@ fun ManageControlsView(
                         onClick = { onSetPanelEnabled(false) },
                         modifier = Modifier.weight(0.5f),
                     )
-                    Divider(
+                    VerticalDivider(
                         modifier = Modifier
                             .fillMaxHeight()
-                            .width(1.dp),
+                            .width(HABorderWidth.S),
+                        color = LocalHAColorScheme.current.colorBorderNeutralQuiet,
                     )
                     ManageControlsModeButton(
                         isPanel = true,
@@ -134,24 +138,20 @@ fun ManageControlsView(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
-                            .padding(start = 16.dp, bottom = 16.dp, end = 16.dp)
+                            .padding(start = HADimens.SPACE4, bottom = HADimens.SPACE4, end = HADimens.SPACE4)
                             .fillMaxWidth(),
                     ) {
-                        Box(
-                            modifier = Modifier.weight(1f),
-                        ) {
+                        Box(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = stringResource(commonR.string.controls_structure_enabled),
-                                fontSize = 15.sp,
+                                style = HATextStyle.Body.copy(textAlign = TextAlign.Start),
+                                color = LocalHAColorScheme.current.colorTextPrimary,
                             )
                         }
-                        Switch(
+                        HASwitch(
                             checked = structureEnabled,
-                            onCheckedChange = { onSetStructureEnabled(it) },
-                            colors = SwitchDefaults.colors(
-                                uncheckedThumbColor = colorResource(R.color.colorSwitchUncheckedThumb),
-                            ),
-                            modifier = Modifier.padding(start = 8.dp),
+                            onCheckedChange = onSetStructureEnabled,
+                            modifier = Modifier.padding(start = HADimens.SPACE2),
                         )
                     }
                 }
@@ -160,39 +160,42 @@ fun ManageControlsView(
             item {
                 Text(
                     text = stringResource(commonR.string.controls_setting_choose_setting),
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    style = HATextStyle.BodyMedium.copy(textAlign = TextAlign.Start),
+                    color = LocalHAColorScheme.current.colorTextSecondary,
+                    modifier = Modifier.padding(horizontal = HADimens.SPACE4),
                 )
             }
             if (entitiesLoaded) {
                 if (entitiesList.isNotEmpty()) {
                     item {
-                        Row(modifier = Modifier.padding(all = 16.dp)) {
-                            OutlinedButton(
+                        Row(modifier = Modifier.padding(all = HADimens.SPACE4)) {
+                            HAFilledButton(
+                                text = stringResource(commonR.string.controls_setting_choose_all),
                                 onClick = onSelectAll,
+                                variant = ButtonVariant.NEUTRAL,
                                 enabled = authSetting !== ControlsAuthRequiredSetting.NONE,
                                 modifier = Modifier.weight(1f),
-                            ) {
-                                Text(stringResource(commonR.string.controls_setting_choose_all))
-                            }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            OutlinedButton(
+                            )
+                            Spacer(modifier = Modifier.width(HADimens.SPACE4))
+                            HAFilledButton(
+                                text = stringResource(commonR.string.controls_setting_choose_none),
                                 onClick = onSelectNone,
+                                variant = ButtonVariant.NEUTRAL,
                                 enabled = authSetting !== ControlsAuthRequiredSetting.ALL,
                                 modifier = Modifier.weight(1f),
-                            ) {
-                                Text(stringResource(commonR.string.controls_setting_choose_none))
-                            }
+                            )
                         }
                     }
                     if (serversList.size > 1) {
                         item {
-                            ServerExposedDropdownMenu(
-                                servers = serversList,
-                                current = selectedServer,
-                                onSelected = { selectedServer = it },
+                            HADropdownMenu(
+                                items = serversList.map { HADropdownItem(key = it.id, label = it.friendlyName) },
+                                selectedKey = selectedServer,
+                                onItemSelected = { selectedServer = it },
+                                label = stringResource(commonR.string.server_select),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                                    .padding(start = HADimens.SPACE4, end = HADimens.SPACE4, bottom = HADimens.SPACE4),
                             )
                         }
                     }
@@ -217,16 +220,17 @@ fun ManageControlsView(
                     item {
                         Text(
                             text = stringResource(commonR.string.controls_setting_choose_empty),
-                            modifier = Modifier.padding(all = 16.dp),
-                            fontStyle = FontStyle.Italic,
+                            style = HATextStyle.Body.copy(textAlign = TextAlign.Start, fontStyle = FontStyle.Italic),
+                            color = LocalHAColorScheme.current.colorTextSecondary,
+                            modifier = Modifier.padding(all = HADimens.SPACE4),
                         )
                     }
                 }
             } else {
                 item {
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Spacer(modifier = Modifier.height(24.dp))
-                        CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
+                        Spacer(modifier = Modifier.height(HADimens.SPACE6))
+                        HALoading(modifier = Modifier.align(Alignment.CenterHorizontally))
                     }
                 }
             }
@@ -235,38 +239,43 @@ fun ManageControlsView(
                 item {
                     Box(
                         modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 16.dp),
+                            .padding(horizontal = HADimens.SPACE4)
+                            .padding(bottom = HADimens.SPACE4),
                     ) {
-                        HaAlertWarning(
-                            message = stringResource(commonR.string.controls_setting_alert),
-                            action = null,
-                            onActionClicked = {},
-                        )
+                        HomeAssistantAppTheme {
+                            HaAlertWarning(
+                                message = stringResource(commonR.string.controls_setting_alert),
+                                action = null,
+                                onActionClicked = {},
+                            )
+                        }
                     }
                 }
             }
             item {
                 Text(
                     text = stringResource(commonR.string.controls_setting_dashboard_setting),
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    style = HATextStyle.BodyMedium.copy(textAlign = TextAlign.Start),
+                    color = LocalHAColorScheme.current.colorTextSecondary,
+                    modifier = Modifier.padding(horizontal = HADimens.SPACE4),
                 )
             }
             if (serversList.size > 1) {
                 item {
-                    ServerExposedDropdownMenu(
-                        servers = serversList,
-                        current = panelServer,
-                        onSelected = { panelServer = it },
+                    HADropdownMenu(
+                        items = serversList.map { HADropdownItem(key = it.id, label = it.friendlyName) },
+                        selectedKey = panelServer,
+                        onItemSelected = { panelServer = it },
+                        label = stringResource(commonR.string.server_select),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .padding(top = 16.dp),
+                            .padding(horizontal = HADimens.SPACE4)
+                            .padding(top = HADimens.SPACE4),
                     )
                 }
             }
             item {
-                TextField(
+                HATextField(
                     value = panelPath,
                     onValueChange = { panelPath = it },
                     label = { Text(stringResource(id = R.string.lovelace_view_dashboard)) },
@@ -275,16 +284,15 @@ fun ManageControlsView(
                         autoCorrectEnabled = false,
                         keyboardType = KeyboardType.Uri,
                     ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(all = 16.dp),
+                    modifier = Modifier.padding(all = HADimens.SPACE4),
                 )
             }
             item {
                 Row(
-                    modifier = Modifier.padding(start = 16.dp, bottom = 16.dp),
+                    modifier = Modifier.padding(start = HADimens.SPACE4, bottom = HADimens.SPACE4),
                 ) {
-                    Button(
+                    HAAccentButton(
+                        text = stringResource(commonR.string.save),
                         enabled = (
                             (
                                 panelPath != panelSetting?.first &&
@@ -293,9 +301,7 @@ fun ManageControlsView(
                                 panelServer != panelSetting.second
                             ),
                         onClick = { onSetPanelSetting(panelPath, panelServer) },
-                    ) {
-                        Text(stringResource(commonR.string.save))
-                    }
+                    )
                 }
             }
         }
@@ -310,42 +316,48 @@ fun ManageControlsEntity(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colorScheme = LocalHAColorScheme.current
     Row(
         modifier = modifier
             .clickable { onClick() }
             .fillMaxWidth()
-            .padding(all = 16.dp),
+            .padding(all = HADimens.SPACE4),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(
             checked = selected,
-            modifier = Modifier.padding(end = 16.dp),
+            colors = checkboxColors(),
+            modifier = Modifier.padding(end = HADimens.SPACE4),
             // Handled by parent Row clickable modifier
             onCheckedChange = null,
         )
         Column(
             modifier = Modifier.weight(1f),
         ) {
-            Text(text = entityName, style = MaterialTheme.typography.body1)
-            CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
-                Text(
-                    text = getEntityDomainString(entityDomain),
-                    style = MaterialTheme.typography.body2,
-                )
-            }
+            Text(
+                text = entityName,
+                style = HATextStyle.Body.copy(textAlign = TextAlign.Start),
+                color = colorScheme.colorTextPrimary,
+            )
+            Text(
+                text = getEntityDomainString(entityDomain),
+                style = HATextStyle.BodyMedium.copy(textAlign = TextAlign.Start),
+                color = colorScheme.colorTextSecondary,
+            )
         }
     }
 }
 
 @Composable
 fun ManageControlsModeButton(isPanel: Boolean, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val colorScheme = LocalHAColorScheme.current
     Box(
         modifier = modifier
             .height(IntrinsicSize.Max)
             .selectable(selected = selected, onClick = onClick),
     ) {
         Column(
-            modifier = Modifier.padding(all = 8.dp),
+            modifier = Modifier.padding(all = HADimens.SPACE2),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Image(
@@ -355,15 +367,15 @@ fun ManageControlsModeButton(isPanel: Boolean, selected: Boolean, onClick: () ->
                     CommunityMaterial.Icon.cmd_dip_switch
                 },
                 contentDescription = null,
-                modifier = Modifier.size(36.dp),
-                colorFilter = ColorFilter.tint(LocalContentColor.current),
+                modifier = Modifier.size(HADimens.SPACE9),
+                colorFilter = ColorFilter.tint(colorScheme.colorTextPrimary),
             )
             Text(
                 text = stringResource(
                     if (isPanel) commonR.string.lovelace else commonR.string.controls_setting_mode_builtin_title,
                 ),
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
+                style = HATextStyle.Body.copy(fontWeight = FontWeight.Bold),
+                color = colorScheme.colorTextPrimary,
                 modifier = Modifier.fillMaxWidth(),
             )
             Text(
@@ -375,15 +387,46 @@ fun ManageControlsModeButton(isPanel: Boolean, selected: Boolean, onClick: () ->
                         commonR.string.controls_setting_mode_builtin_info
                     },
                 )}\n",
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center,
+                style = HATextStyle.BodyMedium,
+                color = colorScheme.colorTextSecondary,
                 modifier = Modifier.fillMaxWidth(),
             )
             RadioButton(
                 selected = selected,
+                colors = radioButtonColors(),
                 // Handled by parent
                 onClick = null,
             )
         }
     }
+}
+
+@Composable
+private fun checkboxColors(): CheckboxColors {
+    val colorScheme = LocalHAColorScheme.current
+    return CheckboxColors(
+        checkedCheckmarkColor = colorScheme.colorOnPrimaryLoud,
+        uncheckedCheckmarkColor = Color.Transparent,
+        checkedBoxColor = colorScheme.colorFillPrimaryLoudResting,
+        uncheckedBoxColor = Color.Transparent,
+        disabledCheckedBoxColor = colorScheme.colorFillDisabledLoudResting,
+        disabledUncheckedBoxColor = Color.Transparent,
+        disabledIndeterminateBoxColor = colorScheme.colorFillDisabledLoudResting,
+        checkedBorderColor = colorScheme.colorFillPrimaryLoudResting,
+        uncheckedBorderColor = colorScheme.colorOnNeutralNormal,
+        disabledBorderColor = colorScheme.colorOnDisabledNormal,
+        disabledUncheckedBorderColor = colorScheme.colorOnDisabledNormal,
+        disabledIndeterminateBorderColor = colorScheme.colorOnDisabledNormal,
+    )
+}
+
+@Composable
+private fun radioButtonColors(): RadioButtonColors {
+    val colorScheme = LocalHAColorScheme.current
+    return RadioButtonColors(
+        selectedColor = colorScheme.colorOnPrimaryNormal,
+        unselectedColor = colorScheme.colorOnNeutralNormal,
+        disabledUnselectedColor = colorScheme.colorOnDisabledNormal,
+        disabledSelectedColor = colorScheme.colorOnDisabledNormal,
+    )
 }

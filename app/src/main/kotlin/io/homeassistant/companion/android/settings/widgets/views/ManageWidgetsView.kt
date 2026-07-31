@@ -4,22 +4,25 @@ import android.appwidget.AppWidgetManager
 import android.content.Intent
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.Button
-import androidx.compose.material.ExtendedFloatingActionButton
-import androidx.compose.material.Icon
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Scaffold
-import androidx.compose.material.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.MaterialTheme as M2MaterialTheme
+import androidx.compose.material.Text as M2Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,17 +30,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.mikepenz.iconics.compose.Image
 import com.mikepenz.iconics.typeface.IIcon
 import com.mikepenz.iconics.typeface.library.community.material.CommunityMaterial
 import io.homeassistant.companion.android.common.R
+import io.homeassistant.companion.android.common.compose.composable.HASettingsCard
+import io.homeassistant.companion.android.common.compose.composable.HASettingsSubheader
+import io.homeassistant.companion.android.common.compose.theme.HADimens
+import io.homeassistant.companion.android.common.compose.theme.HARadius
+import io.homeassistant.companion.android.common.compose.theme.HATextStyle
+import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import io.homeassistant.companion.android.database.widget.WidgetEntity
 import io.homeassistant.companion.android.settings.views.EmptyState
 import io.homeassistant.companion.android.settings.widgets.ManageWidgetsViewModel
+import io.homeassistant.companion.android.util.compose.HomeAssistantAppTheme
 import io.homeassistant.companion.android.util.compose.MdcAlertDialog
 import io.homeassistant.companion.android.util.plus
 import io.homeassistant.companion.android.util.safeBottomPaddingValues
@@ -76,8 +88,6 @@ fun ManageWidgetsView(viewModel: ManageWidgetsViewModel, modifier: Modifier = Mo
             if (viewModel.supportsAddingWidgets) {
                 ExtendedFloatingActionButton(
                     modifier = Modifier.padding(safeBottomPaddingValues(applyHorizontal = false)),
-                    backgroundColor = MaterialTheme.colors.primary,
-                    contentColor = MaterialTheme.colors.onPrimary,
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                     text = { Text(stringResource(R.string.add_widget)) },
                     onClick = { expandedAddWidget = true },
@@ -95,21 +105,23 @@ fun ManageWidgetsView(viewModel: ManageWidgetsViewModel, modifier: Modifier = Mo
                 stringResource(R.string.todo_widget) to WidgetType.TODO,
             ).sortedBy { it.first }
 
-            MdcAlertDialog(
-                onDismissRequest = { expandedAddWidget = false },
-                title = { Text(stringResource(R.string.add_widget)) },
-                content = {
-                    LazyColumn {
-                        items(availableWidgets, key = { (key) -> key }) { (key, widgetType) ->
-                            PopupWidgetRow(widgetLabel = key, widgetType = widgetType) {
-                                expandedAddWidget = false
+            HomeAssistantAppTheme {
+                MdcAlertDialog(
+                    onDismissRequest = { expandedAddWidget = false },
+                    title = { Text(stringResource(R.string.add_widget)) },
+                    content = {
+                        LazyColumn {
+                            items(availableWidgets, key = { (key) -> key }) { (key, widgetType) ->
+                                PopupWidgetRow(widgetLabel = key, widgetType = widgetType) {
+                                    expandedAddWidget = false
+                                }
                             }
                         }
-                    }
-                },
-                onCancel = { expandedAddWidget = false },
-                contentPadding = PaddingValues(all = 0.dp),
-            )
+                    },
+                    onCancel = { expandedAddWidget = false },
+                    contentPadding = PaddingValues(all = 0.dp),
+                )
+            }
         }
         LazyColumn(
             contentPadding = PaddingValues(all = 16.dp) + safeBottomPaddingValues(applyHorizontal = false),
@@ -125,11 +137,13 @@ fun ManageWidgetsView(viewModel: ManageWidgetsViewModel, modifier: Modifier = Mo
                 viewModel.todoWidgetList.value.isEmpty()
             ) {
                 item {
-                    EmptyState(
-                        icon = CommunityMaterial.Icon3.cmd_widgets,
-                        title = stringResource(R.string.no_widgets),
-                        subtitle = stringResource(R.string.no_widgets_summary),
-                    )
+                    HomeAssistantAppTheme {
+                        EmptyState(
+                            icon = CommunityMaterial.Icon3.cmd_widgets,
+                            title = stringResource(R.string.no_widgets),
+                            subtitle = stringResource(R.string.no_widgets_summary),
+                        )
+                    }
                 }
             }
             widgetItems(
@@ -193,10 +207,15 @@ private fun <T : WidgetEntity<T>> LazyListScope.widgetItems(
 ) {
     if (widgetList.isNotEmpty()) {
         item {
-            Text(stringResource(id = title))
+            HASettingsSubheader(text = stringResource(id = title))
         }
         items(widgetList, key = { "$widgetType-${it.id}" }) { item ->
-            WidgetRow(widgetLabel = widgetLabel(item), widgetId = item.id, widgetType = widgetType)
+            WidgetRow(
+                widgetLabel = widgetLabel(item),
+                widgetId = item.id,
+                widgetType = widgetType,
+                modifier = Modifier.padding(vertical = HADimens.SPACE1),
+            )
         }
     }
 }
@@ -227,25 +246,50 @@ private fun PopupWidgetRow(
         ) {
             Image(
                 asset = widgetType.widgetIcon,
-                colorFilter = ColorFilter.tint(MaterialTheme.colors.onSurface),
+                colorFilter = ColorFilter.tint(M2MaterialTheme.colors.onSurface),
                 contentDescription = widgetLabel,
             )
-            Text(text = widgetLabel, modifier = Modifier.padding(start = 16.dp))
+            M2Text(text = widgetLabel, modifier = Modifier.padding(start = 16.dp))
         }
     }
 }
 
+/**
+ * A single configured widget, showing its type icon and current label. Tapping opens the
+ * widget's own configuration screen so the user can adjust it.
+ */
 @Composable
 private fun WidgetRow(widgetLabel: String, widgetId: Int, widgetType: WidgetType, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    Row(modifier = modifier) {
-        Button(onClick = {
-            val intent = Intent(context, widgetType.configureActivity()).apply {
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
-            }
-            context.startActivity(intent)
-        }) {
-            Text(widgetLabel)
+    val colorScheme = LocalHAColorScheme.current
+    HASettingsCard(
+        modifier = modifier
+            .clip(RoundedCornerShape(HARadius.XL))
+            .clickable {
+                val intent = Intent(context, widgetType.configureActivity()).apply {
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+                }
+                context.startActivity(intent)
+            },
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = HADimens.SPACE10),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(HADimens.SPACE4),
+        ) {
+            Image(
+                asset = widgetType.widgetIcon,
+                colorFilter = ColorFilter.tint(colorScheme.colorTextPrimary),
+                contentDescription = null,
+            )
+            Text(
+                text = widgetLabel,
+                style = HATextStyle.Body,
+                color = colorScheme.colorTextPrimary,
+                textAlign = TextAlign.Start,
+            )
         }
     }
 }

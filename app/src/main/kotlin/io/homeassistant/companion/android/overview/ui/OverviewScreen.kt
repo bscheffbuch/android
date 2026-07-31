@@ -1,11 +1,17 @@
 package io.homeassistant.companion.android.overview.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,6 +33,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
@@ -54,13 +62,17 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -74,17 +86,23 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.round
 import androidx.compose.ui.zIndex
 import io.homeassistant.companion.android.common.R as commonR
 import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
@@ -94,7 +112,6 @@ import io.homeassistant.companion.android.overview.OverviewUiState
 import io.homeassistant.companion.android.overview.OverviewViewModel
 import io.homeassistant.companion.android.overview.isOutletSwitch
 import io.homeassistant.companion.android.overview.supportsDisplayAsLight
-import kotlin.math.abs
 import kotlinx.coroutines.flow.Flow
 import org.jetbrains.annotations.VisibleForTesting
 
@@ -117,6 +134,9 @@ fun OverviewScreen(
     onMoveItem: (fromKey: String, toKey: String) -> Unit,
     onItemDrop: (sourceKey: String, targetKey: String) -> Unit,
     onRemoveEntityFromGroup: (groupId: String, entityId: String) -> Unit,
+    onMoveGroupMember: (groupId: String, fromEntityId: String, toEntityId: String) -> Unit,
+    onMoveEntityIntoGroup: (entityId: String, groupId: String, targetEntityId: String) -> Unit,
+    onMoveEntityOutOfGroup: (groupId: String, entityId: String, targetKey: String) -> Unit,
     onGroupExpandedChange: (groupId: String, expanded: Boolean) -> Unit,
     onSetDisplayedAsLight: (entityId: String, asLight: Boolean) -> Unit,
     onTriggerAutomation: (String) -> Unit,
@@ -244,6 +264,9 @@ fun OverviewScreen(
                     onDeleteLightGroup = onDeleteLightGroup,
                     onItemDrop = onItemDrop,
                     onRemoveEntityFromGroup = onRemoveEntityFromGroup,
+                    onMoveGroupMember = onMoveGroupMember,
+                    onMoveEntityIntoGroup = onMoveEntityIntoGroup,
+                    onMoveEntityOutOfGroup = onMoveEntityOutOfGroup,
                     onGroupExpandedChange = onGroupExpandedChange,
                     displayedAsLightEntityIds = uiState.displayedAsLightEntityIds,
                     onSetDisplayedAsLight = onSetDisplayedAsLight,
@@ -346,6 +369,9 @@ private fun OverviewGrid(
     onDeleteLightGroup: (String) -> Unit,
     onItemDrop: (sourceKey: String, targetKey: String) -> Unit,
     onRemoveEntityFromGroup: (groupId: String, entityId: String) -> Unit,
+    onMoveGroupMember: (groupId: String, fromEntityId: String, toEntityId: String) -> Unit,
+    onMoveEntityIntoGroup: (entityId: String, groupId: String, targetEntityId: String) -> Unit,
+    onMoveEntityOutOfGroup: (groupId: String, entityId: String, targetKey: String) -> Unit,
     onGroupExpandedChange: (groupId: String, expanded: Boolean) -> Unit,
     displayedAsLightEntityIds: Set<String>,
     onSetDisplayedAsLight: (entityId: String, asLight: Boolean) -> Unit,
@@ -364,17 +390,15 @@ private fun OverviewGrid(
     modifier: Modifier = Modifier,
 ) {
     val lazyGridState = rememberLazyGridState()
-    var draggingSourceKey by remember { mutableStateOf<String?>(null) }
-    var groupDropTargetKey by remember { mutableStateOf<String?>(null) }
-    var swapDropTargetKey by remember { mutableStateOf<String?>(null) }
+    // One drag session for the whole grid. Owned here (the stable container) so a card can be carried
+    // across the top-level/group boundary without its per-card gesture being torn down mid-drag.
+    val dragState = remember { OverviewDragState() }
     val borrowedNeighbors = remember(displayItems) { displayItems.withBorrowedNeighbors() }
+    val entityById = remember(borrowedNeighbors) { borrowedNeighbors.items.draggableEntityLookup() }
+    val visibleItemsInfoProvider = { lazyGridState.layoutInfo.visibleItemsInfo }
 
-    androidx.compose.runtime.LaunchedEffect(displayItems, isEditMode) {
-        if (!isEditMode) {
-            draggingSourceKey = null
-            groupDropTargetKey = null
-            swapDropTargetKey = null
-        }
+    LaunchedEffect(isEditMode) {
+        if (!isEditMode) dragState.reset()
     }
 
     PullToRefreshBox(
@@ -382,75 +406,89 @@ private fun OverviewGrid(
         onRefresh = onRefresh,
         modifier = modifier,
     ) {
-        LazyVerticalGrid(
-            state = lazyGridState,
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(OverviewCardGap),
-            horizontalArrangement = Arrangement.spacedBy(OverviewCardGap),
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-        ) {
-            itemsIndexed(
-                items = borrowedNeighbors.items,
-                key = { _, item -> item.key },
-                span = { _, item ->
-                    GridItemSpan(if (item is OverviewDisplayItem.Group && item.isExpanded) maxLineSpan else 1)
-                },
-            ) { index, item ->
-                OverviewGridItem(
-                    item = item,
-                    index = index,
+                // Root-space origin of this box: lets the drag machinery convert the grid's
+                // viewport-relative cell offsets and the finger position into one shared space.
+                .onGloballyPositioned { dragState.containerOrigin = it.positionInRoot() }
+                .overviewDragDetector(
+                    enabled = isEditMode,
+                    dragState = dragState,
                     displayItems = borrowedNeighbors.items,
-                    borrowedNeighbor = (item as? OverviewDisplayItem.Group)?.let {
-                        borrowedNeighbors.byGroupKey[it.key]
-                    },
-                    visibleItemsInfoProvider = { lazyGridState.layoutInfo.visibleItemsInfo },
-                    isEditMode = isEditMode,
-                    isGroupDropTarget = item.key == groupDropTargetKey,
-                    isSwapDropTarget = item.key == swapDropTargetKey,
-                    modifier = Modifier.animateItem(),
+                    entityById = entityById,
+                    visibleItemsInfoProvider = visibleItemsInfoProvider,
                     onMoveItem = onMoveItem,
-                    onToggleEntity = onToggleEntity,
-                    onToggleLightGroup = onToggleLightGroup,
-                    onBrightnessChange = onBrightnessChange,
-                    onGroupBrightnessChange = onGroupBrightnessChange,
-                    onOpenEntityDetail = onOpenEntityDetail,
-                    onOpenGroupDetail = onOpenGroupDetail,
-                    onEditGroup = onEditGroup,
-                    onDeleteLightGroup = onDeleteLightGroup,
-                    onItemDrop = onItemDrop,
+                    onMoveGroupMember = onMoveGroupMember,
+                    onMoveEntityIntoGroup = onMoveEntityIntoGroup,
+                    onMoveEntityOutOfGroup = onMoveEntityOutOfGroup,
+                    onMergeCommit = onItemDrop,
                     onRemoveEntityFromGroup = onRemoveEntityFromGroup,
-                    onGroupExpandedChange = onGroupExpandedChange,
-                    displayedAsLightEntityIds = displayedAsLightEntityIds,
-                    onSetDisplayedAsLight = onSetDisplayedAsLight,
-                    onTriggerAutomation = onTriggerAutomation,
-                    onSetFanSpeed = onSetFanSpeed,
-                    onSetCoverPosition = onSetCoverPosition,
-                    onStopCover = onStopCover,
-                    onCycleClimateHvacMode = onCycleClimateHvacMode,
-                    onSetClimateTemperature = onSetClimateTemperature,
-                    onTogglePlayback = onTogglePlayback,
-                    onSetMediaVolume = onSetMediaVolume,
-                    onSkipToPreviousTrack = onSkipToPreviousTrack,
-                    onSkipToNextTrack = onSkipToNextTrack,
-                    onSetHumidifierHumidity = onSetHumidifierHumidity,
-                    onCycleHumidifierMode = onCycleHumidifierMode,
-                    onDragStart = { sourceKey ->
-                        draggingSourceKey = sourceKey
+                ),
+        ) {
+            LazyVerticalGrid(
+                state = lazyGridState,
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(OverviewCardGap),
+                horizontalArrangement = Arrangement.spacedBy(OverviewCardGap),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+            ) {
+                itemsIndexed(
+                    items = borrowedNeighbors.items,
+                    key = { _, item -> item.key },
+                    span = { _, item ->
+                        GridItemSpan(if (item is OverviewDisplayItem.Group && item.isExpanded) maxLineSpan else 1)
                     },
-                    onDragPreview = { _, targetKey, isGrouping ->
-                        groupDropTargetKey = if (isGrouping) targetKey else null
-                        swapDropTargetKey = if (!isGrouping) targetKey else null
-                    },
-                    onDragFinished = {
-                        draggingSourceKey = null
-                        groupDropTargetKey = null
-                        swapDropTargetKey = null
-                    },
-                )
+                ) { index, item ->
+                    OverviewGridItem(
+                        item = item,
+                        index = index,
+                        displayItems = borrowedNeighbors.items,
+                        borrowedNeighbor = (item as? OverviewDisplayItem.Group)?.let {
+                            borrowedNeighbors.byGroupKey[it.key]
+                        },
+                        dragState = dragState,
+                        isEditMode = isEditMode,
+                        isMergeTarget = item.key == dragState.mergeTargetKey,
+                        // The dragged item is drawn by the floating overlay, so its own cell renders as
+                        // an invisible placeholder that just holds the grid gap open. Every OTHER card
+                        // keeps animateItem() so it slides as the live shuffle reorders the grid.
+                        modifier = if (item.key == dragState.draggedKey) Modifier else Modifier.animateItem(),
+                        onToggleEntity = onToggleEntity,
+                        onToggleLightGroup = onToggleLightGroup,
+                        onBrightnessChange = onBrightnessChange,
+                        onGroupBrightnessChange = onGroupBrightnessChange,
+                        onOpenEntityDetail = onOpenEntityDetail,
+                        onOpenGroupDetail = onOpenGroupDetail,
+                        onEditGroup = onEditGroup,
+                        onDeleteLightGroup = onDeleteLightGroup,
+                        onGroupExpandedChange = onGroupExpandedChange,
+                        displayedAsLightEntityIds = displayedAsLightEntityIds,
+                        onSetDisplayedAsLight = onSetDisplayedAsLight,
+                        onTriggerAutomation = onTriggerAutomation,
+                        onSetFanSpeed = onSetFanSpeed,
+                        onSetCoverPosition = onSetCoverPosition,
+                        onStopCover = onStopCover,
+                        onCycleClimateHvacMode = onCycleClimateHvacMode,
+                        onSetClimateTemperature = onSetClimateTemperature,
+                        onTogglePlayback = onTogglePlayback,
+                        onSetMediaVolume = onSetMediaVolume,
+                        onSkipToPreviousTrack = onSkipToPreviousTrack,
+                        onSkipToNextTrack = onSkipToNextTrack,
+                        onSetHumidifierHumidity = onSetHumidifierHumidity,
+                        onCycleHumidifierMode = onCycleHumidifierMode,
+                    )
+                }
             }
+            DraggedCardOverlay(
+                dragState = dragState,
+                displayItems = borrowedNeighbors.items,
+                entityById = entityById,
+                displayedAsLightEntityIds = displayedAsLightEntityIds,
+            )
         }
     }
 }
@@ -461,12 +499,10 @@ private fun OverviewGridItem(
     index: Int,
     displayItems: List<OverviewDisplayItem>,
     borrowedNeighbor: Entity?,
-    visibleItemsInfoProvider: () -> List<LazyGridItemInfo>,
+    dragState: OverviewDragState,
     isEditMode: Boolean,
-    isGroupDropTarget: Boolean,
-    isSwapDropTarget: Boolean,
+    isMergeTarget: Boolean,
     modifier: Modifier = Modifier,
-    onMoveItem: (fromKey: String, toKey: String) -> Unit,
     onToggleEntity: (String) -> Unit,
     onToggleLightGroup: (String) -> Unit,
     onBrightnessChange: (entityId: String, brightness: Float, immediate: Boolean) -> Unit,
@@ -475,8 +511,6 @@ private fun OverviewGridItem(
     onOpenGroupDetail: (OverviewLightGroup) -> Unit,
     onEditGroup: (OverviewLightGroup) -> Unit,
     onDeleteLightGroup: (String) -> Unit,
-    onItemDrop: (sourceKey: String, targetKey: String) -> Unit,
-    onRemoveEntityFromGroup: (groupId: String, entityId: String) -> Unit,
     onGroupExpandedChange: (groupId: String, expanded: Boolean) -> Unit,
     displayedAsLightEntityIds: Set<String>,
     onSetDisplayedAsLight: (entityId: String, asLight: Boolean) -> Unit,
@@ -492,53 +526,25 @@ private fun OverviewGridItem(
     onSkipToNextTrack: (String) -> Unit,
     onSetHumidifierHumidity: (entityId: String, humidity: Float, immediate: Boolean) -> Unit,
     onCycleHumidifierMode: (entityId: String) -> Unit,
-    onDragStart: (sourceKey: String) -> Unit,
-    onDragPreview: (sourceKey: String, targetKey: String?, isGrouping: Boolean) -> Unit,
-    onDragFinished: (committed: Boolean) -> Unit,
 ) {
-    var isDragging by remember(item.key) { mutableStateOf(false) }
-    var dragTranslation by remember(item.key) { mutableStateOf(Offset.Zero) }
-    val editDragModifier = if (isEditMode) {
-        Modifier.editDragHandle(
-            sourceKey = item.key,
-            displayItems = displayItems,
-            visibleItemsInfoProvider = visibleItemsInfoProvider,
-            onDragStateChange = { isDragging = it },
-            onDragTranslationChange = { dragTranslation = it },
-            onDragStart = onDragStart,
-            onDragPreview = onDragPreview,
-            onDragCommit = { sourceKey, targetKey, isGrouping ->
-                if (isGrouping) {
-                    onItemDrop(sourceKey, targetKey)
-                } else {
-                    onMoveItem(sourceKey, targetKey)
-                }
-                onDragFinished(true)
-            },
-            onDragCancel = {
-                onDragFinished(false)
-            },
-        )
-    } else {
-        Modifier
-    }
+    // The dragged card is drawn by the floating overlay ([DraggedCardOverlay]), so its home cell
+    // renders invisibly (alpha 0) and just holds the grid gap open — the live shuffle moves that gap
+    // around. A card the drag is hovering as a merge target swells slightly; springing it reads as
+    // "dynamic".
+    val isDragged = item.key == dragState.draggedKey
+    val mergeSwell by animateFloatAsState(
+        targetValue = if (isMergeTarget) DROP_TARGET_SCALE else 1f,
+        animationSpec = spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium),
+        label = "merge_target_swell",
+    )
 
     Box(
         modifier = modifier
-            .then(editDragModifier)
-            .zIndex(
-                when {
-                    isDragging -> 2f
-                    isGroupDropTarget -> 1f
-                    else -> 0f
-                },
-            )
+            .zIndex(if (isMergeTarget) 1f else 0f)
             .graphicsLayer {
-                translationX = dragTranslation.x
-                translationY = dragTranslation.y
-                scaleX = if (isDragging || isGroupDropTarget || isSwapDropTarget) 1.04f else 1f
-                scaleY = if (isDragging || isGroupDropTarget || isSwapDropTarget) 1.04f else 1f
-                shadowElevation = if (isDragging) 16f else 0f
+                scaleX = mergeSwell
+                scaleY = mergeSwell
+                alpha = if (isDragged) 0f else 1f
             },
     ) {
         when (item) {
@@ -552,6 +558,7 @@ private fun OverviewGridItem(
                         accentColor = accentColor,
                         isAnchorRightColumn = displayItems.collapsedColumnOf(index) == 1,
                         isEditMode = isEditMode,
+                        dragState = dragState,
                         onExpandedChange = { expanded -> onGroupExpandedChange(item.group.id, expanded) },
                         onToggleGroup = { onToggleLightGroup(item.group.id) },
                         onGroupBrightnessChange = { brightness, immediate ->
@@ -563,7 +570,6 @@ private fun OverviewGridItem(
                         onToggleEntity = onToggleEntity,
                         onEntityBrightnessChange = onBrightnessChange,
                         onOpenEntityDetail = onOpenEntityDetail,
-                        onRemoveEntityFromGroup = { entityId -> onRemoveEntityFromGroup(item.group.id, entityId) },
                         borrowedNeighbor = borrowedNeighbor,
                         displayedAsLightEntityIds = displayedAsLightEntityIds,
                         onTriggerAutomation = onTriggerAutomation,
@@ -623,23 +629,44 @@ private fun OverviewGridItem(
                 onCycleHumidifierMode = onCycleHumidifierMode,
             )
         }
-        if (isGroupDropTarget) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .border(
-                        2.dp,
-                        LocalHAColorScheme.current.colorFillLightLoudResting.copy(
-                            alpha = LIGHT_PICKER_SELECTED_CONTAINER_ALPHA,
-                        ),
-                        RoundedCornerShape(18.dp),
-                    ),
-            )
-        } else if (isSwapDropTarget) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .border(2.dp, LocalHAColorScheme.current.colorFillPrimaryLoudResting, RoundedCornerShape(18.dp)),
+        if (isMergeTarget) {
+            MergeTargetIndicator()
+        }
+    }
+}
+
+// Fill opacity of the drop-target preview overlay — enough to clearly mark the landing cell while
+// still letting the card underneath read through.
+private const val DROP_TARGET_FILL_ALPHA = 0.22f
+
+/**
+ * The "merge here" preview drawn over the light (or group) cell a drag is hovering dead-centre: a
+ * filled, outlined wash of the group accent plus a centred plus badge, so the user sees both *where*
+ * the two lights will combine and *that* dropping groups them. Reordering has no indicator of its
+ * own — the live shuffle physically opening the landing slot is the feedback.
+ */
+@Composable
+private fun BoxScope.MergeTargetIndicator() {
+    val colors = LocalHAColorScheme.current
+    val accent = colors.colorFillLightLoudResting
+    Box(
+        modifier = Modifier
+            .matchParentSize()
+            .background(accent.copy(alpha = DROP_TARGET_FILL_ALPHA), RoundedCornerShape(18.dp))
+            .border(2.dp, accent, RoundedCornerShape(18.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(colors.colorSurfaceDefault, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Add,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(22.dp),
             )
         }
     }
@@ -887,6 +914,7 @@ internal fun ExpandedLightGroupCard(
     accentColor: Color,
     isAnchorRightColumn: Boolean,
     isEditMode: Boolean,
+    dragState: OverviewDragState = remember { OverviewDragState() },
     onExpandedChange: (Boolean) -> Unit,
     onToggleGroup: () -> Unit,
     onGroupBrightnessChange: (brightness: Float, immediate: Boolean) -> Unit,
@@ -896,7 +924,6 @@ internal fun ExpandedLightGroupCard(
     onToggleEntity: (String) -> Unit,
     onEntityBrightnessChange: (entityId: String, brightness: Float, immediate: Boolean) -> Unit,
     onOpenEntityDetail: (Entity) -> Unit,
-    onRemoveEntityFromGroup: (entityId: String) -> Unit,
     borrowedNeighbor: Entity?,
     displayedAsLightEntityIds: Set<String>,
     onTriggerAutomation: (String) -> Unit,
@@ -927,6 +954,41 @@ internal fun ExpandedLightGroupCard(
     val controllerOutlineColor = LocalHAColorScheme.current.colorTextPrimary
     var completeRowsHeightPx by remember { mutableIntStateOf(0) }
 
+    // Members register with the shared, screen-level [dragState] and are rendered through their own
+    // movable content so their placement animation follows them as a live reorder relocates them
+    // between rows — a plain positional card would lose that state and teleport instead of sliding.
+    // The group's highlight bounds are unregistered when it collapses so a stale rectangle can't keep
+    // reading as a live "inside this group" drop zone. Callbacks are read through rememberUpdatedState
+    // refs so this map, created once per member *set*, always calls the latest lambdas without being
+    // recreated on every recomposition (which would defeat the identity preservation).
+    DisposableEffect(group.id) {
+        onDispose { dragState.groupContentBounds.remove(group.id) }
+    }
+    val latestOnToggleEntity = rememberUpdatedState(onToggleEntity)
+    val latestOnEntityBrightnessChange = rememberUpdatedState(onEntityBrightnessChange)
+    val latestOnOpenEntityDetail = rememberUpdatedState(onOpenEntityDetail)
+    val latestAccentColor = rememberUpdatedState(memberAccentColor)
+    val latestIsEditMode = rememberUpdatedState(isEditMode)
+    val memberCards = remember(entities.map { it.entityId }.toSet(), dragState) {
+        entities.associate { member ->
+            member.entityId to movableContentOf<Entity, Modifier> { entity, cardModifier ->
+                GroupMemberCard(
+                    entity = entity,
+                    groupId = group.id,
+                    accentColor = latestAccentColor.value,
+                    isEditMode = latestIsEditMode.value,
+                    dragState = dragState,
+                    onToggle = { latestOnToggleEntity.value(entity.entityId) },
+                    onBrightnessChange = { brightness, immediate ->
+                        latestOnEntityBrightnessChange.value(entity.entityId, brightness, immediate)
+                    },
+                    onOpenDetail = { latestOnOpenEntityDetail.value(entity) },
+                    modifier = cardModifier,
+                )
+            }
+        }
+    }
+
     // The member cells sit exactly where ordinary grid cells would (no extra padding around them),
     // and the tint is drawn as pure overdraw bleeding [GroupHighlightBleed] past the item bounds on
     // every side — halfway into the surrounding 8dp grid gaps. Card-to-card distance therefore stays
@@ -944,6 +1006,9 @@ internal fun ExpandedLightGroupCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            // Root-space bounds of the whole group: the "inside = reorder among members / insert here,
+            // outside = remove" zone the shared drag machinery hit-tests against.
+            .onGloballyPositioned { dragState.groupContentBounds[group.id] = it.boundsInRoot() }
             .drawBehind {
                 val bleedPx = GroupHighlightBleed.toPx()
                 val outline = highlightShape.createOutline(
@@ -990,23 +1055,7 @@ internal fun ExpandedLightGroupCard(
             }
             val firstMember: @Composable RowScope.() -> Unit = {
                 if (firstRowMember != null) {
-                    LightEntityCard(
-                        entity = firstRowMember,
-                        onToggle = { onToggleEntity(firstRowMember.entityId) },
-                        onBrightnessChange = { brightness, immediate ->
-                            onEntityBrightnessChange(firstRowMember.entityId, brightness, immediate)
-                        },
-                        onOpenDetail = { onOpenEntityDetail(firstRowMember) },
-                        enabled = !isEditMode,
-                        accentColor = memberAccentColor,
-                        modifier = Modifier
-                            .weight(1f)
-                            .dragOutToRemoveFromGroup(
-                                entityId = firstRowMember.entityId,
-                                enabled = isEditMode,
-                                onRemove = { onRemoveEntityFromGroup(firstRowMember.entityId) },
-                            ),
-                    )
+                    memberCards[firstRowMember.entityId]?.invoke(firstRowMember, Modifier.weight(1f))
                 } else {
                     Spacer(modifier = Modifier.weight(1f))
                 }
@@ -1035,23 +1084,7 @@ internal fun ExpandedLightGroupCard(
                         horizontalArrangement = Arrangement.spacedBy(OverviewCardGap),
                     ) {
                         rowEntities.forEach { entity ->
-                            LightEntityCard(
-                                entity = entity,
-                                onToggle = { onToggleEntity(entity.entityId) },
-                                onBrightnessChange = { brightness, immediate ->
-                                    onEntityBrightnessChange(entity.entityId, brightness, immediate)
-                                },
-                                onOpenDetail = { onOpenEntityDetail(entity) },
-                                enabled = !isEditMode,
-                                accentColor = memberAccentColor,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .dragOutToRemoveFromGroup(
-                                        entityId = entity.entityId,
-                                        enabled = isEditMode,
-                                        onRemove = { onRemoveEntityFromGroup(entity.entityId) },
-                                    ),
-                            )
+                            memberCards[entity.entityId]?.invoke(entity, Modifier.weight(1f))
                         }
                     }
                 }
@@ -1062,23 +1095,7 @@ internal fun ExpandedLightGroupCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(OverviewCardGap),
                 ) {
-                    LightEntityCard(
-                        entity = lastMember,
-                        onToggle = { onToggleEntity(lastMember.entityId) },
-                        onBrightnessChange = { brightness, immediate ->
-                            onEntityBrightnessChange(lastMember.entityId, brightness, immediate)
-                        },
-                        onOpenDetail = { onOpenEntityDetail(lastMember) },
-                        enabled = !isEditMode,
-                        accentColor = memberAccentColor,
-                        modifier = Modifier
-                            .weight(1f)
-                            .dragOutToRemoveFromGroup(
-                                entityId = lastMember.entityId,
-                                enabled = isEditMode,
-                                onRemove = { onRemoveEntityFromGroup(lastMember.entityId) },
-                            ),
-                    )
+                    memberCards[lastMember.entityId]?.invoke(lastMember, Modifier.weight(1f))
                     if (borrowedNeighbor != null) {
                         OverviewEntityItemContent(
                             entity = borrowedNeighbor,
@@ -1147,169 +1164,548 @@ private fun OverviewEditIconButton(
 }
 
 /**
- * Wires up the long-press-drag gesture used to reorder or group-merge grid items in edit mode.
+ * Shared, grid-level state for the whole overview's drag-and-drop, replacing the old per-card handles.
+ * Held by [OverviewGrid] (a stable container that outlives any individual card) so a single drag can
+ * carry a card across the top-level/group boundary — reordering it in the grid, pulling a member out
+ * of a group, or dropping a light into one — without its gesture being torn down when its membership
+ * (and therefore its host composable) changes mid-drag.
  *
- * [pointerInput] only restarts its gesture-detection coroutine when [sourceKey] changes, which for
- * most items is rare (an item's key persists across recompositions unless it changes group
- * membership). Everything else this function receives — [displayItems] most importantly — is
- * captured by the coroutine's closure at whatever point [sourceKey] last changed, so without
- * [rememberUpdatedState] a long-lived item's gesture would keep evaluating merge/reorder decisions
- * against a stale snapshot of the grid (e.g. missing a group created after that point). Wrapping
- * every captured value in [rememberUpdatedState] keeps the coroutine itself alive (no gesture
- * restart mid-drag) while always reading the latest value.
+ * All rectangles and points are in **root space**. [containerOrigin] is the drag container's root
+ * top-left, used to translate the lazy grid's viewport-relative cell offsets into root space and to
+ * place the floating overlay back into container space. [groupContentBounds] and [memberBounds] are
+ * the settled rectangles the finger is hit-tested against; [draggedKey]/[fingerRoot]/[grabOffset]/
+ * [draggedSize] describe the active drag so the overlay can follow the finger; [mergeTargetKey] marks
+ * a cell a centre-hover would merge into on release; [inRemoveZone] marks that releasing now would
+ * pull the dragged member out of its group.
+ */
+internal class OverviewDragState {
+    var draggedKey by mutableStateOf<String?>(null)
+    var fingerRoot by mutableStateOf(Offset.Zero)
+    var grabOffset by mutableStateOf(Offset.Zero)
+    var draggedSize by mutableStateOf(Size.Zero)
+    var containerOrigin by mutableStateOf(Offset.Zero)
+    var mergeTargetKey by mutableStateOf<String?>(null)
+    var inRemoveZone by mutableStateOf(false)
+    val groupContentBounds = mutableStateMapOf<String, Rect>()
+    val memberBounds = mutableStateMapOf<String, MemberSlot>()
+
+    fun reset() {
+        draggedKey = null
+        mergeTargetKey = null
+        inRemoveZone = false
+    }
+}
+
+/** A settled light-group member cell: its owning [groupId], its [entityId], and its root-space [rect]. */
+internal data class MemberSlot(val groupId: String, val entityId: String, val rect: Rect)
+
+/** A card the drag just picked up: its display [key] and its root-space [rect]. */
+private data class GrabbedCard(val key: String, val rect: Rect)
+
+/**
+ * Where the finger currently sits during a drag, resolved live so cross-boundary moves can be applied
+ * as it moves. [id] is a stable identity so a stationary hover fires a move only once, not every frame.
+ */
+private sealed interface DropZone {
+    val id: String
+
+    data object None : DropZone {
+        override val id = "none"
+    }
+
+    /** Directly over member [entityId] of expanded group [groupId] — insert or reorder there. */
+    data class Member(val groupId: String, val entityId: String) : DropZone {
+        override val id = "member:$groupId:$entityId"
+    }
+
+    /**
+     * Inside expanded group [groupId]'s frame but not over any specific member — the inter-member
+     * gaps, the controller, and the trailing slot. A stable hold zone: the order is left untouched
+     * while the finger hovers this dead space, so a drag can't thrash the arrangement.
+     */
+    data class GroupInterior(val groupId: String) : DropZone {
+        override val id = "groupinterior:$groupId"
+    }
+
+    /** Over top-level cell [key]; [isCenter] is a centre-hover (merge affordance) vs an edge (reorder). */
+    data class TopLevel(val key: String, val isCenter: Boolean) : DropZone {
+        override val id = "top:$key:${if (isCenter) "center" else "edge"}"
+    }
+}
+
+/** The top-level display key ("entity:<id>") for an entity, matching [OverviewDisplayItem.EntityItem]. */
+private fun entityItemKey(entityId: String): String = "${OverviewViewModel.ENTITY_ITEM_PREFIX}$entityId"
+
+/** The entity id encoded in this display key, or null when it is a group (or otherwise non-entity) key. */
+private fun String.entityIdOrNull(): String? =
+    if (startsWith(OverviewViewModel.ENTITY_ITEM_PREFIX)) removePrefix(OverviewViewModel.ENTITY_ITEM_PREFIX) else null
+
+/** The id of the expanded group currently listing [entityId] as a member, or null if it is top-level. */
+private fun List<OverviewDisplayItem>.groupIdContaining(entityId: String): String? =
+    filterIsInstance<OverviewDisplayItem.Group>()
+        .firstOrNull { group -> group.entities.any { it.entityId == entityId } }
+        ?.group
+        ?.id
+
+/**
+ * Every draggable entity (top-level items and expanded-group members) keyed by its display key, so the
+ * floating overlay can render a faithful copy of whichever card is being dragged.
+ */
+private fun List<OverviewDisplayItem>.draggableEntityLookup(): Map<String, Entity> = buildMap {
+    this@draggableEntityLookup.forEach { item ->
+        when (item) {
+            is OverviewDisplayItem.EntityItem -> put(item.key, item.entity)
+            is OverviewDisplayItem.Group -> item.entities.forEach { put(entityItemKey(it.entityId), it) }
+        }
+    }
+}
+
+/** This lazy grid cell's rectangle in root space (its viewport-relative offset shifted by [origin]). */
+private fun LazyGridItemInfo.rootRect(origin: Offset): Rect {
+    val topLeft = origin + Offset(offset.x.toFloat(), offset.y.toFloat())
+    return Rect(topLeft, Size(size.width.toFloat(), size.height.toFloat()))
+}
+
+/**
+ * Finds which draggable card sits under [fingerRoot] at pick-up. Expanded-group members are checked
+ * before top-level cells, so grabbing a member picks up that member while grabbing the controller (or
+ * any non-member part of the group cell) picks up the whole group.
+ */
+private fun OverviewDragState.grabbedCardAt(fingerRoot: Offset, visibleItems: List<LazyGridItemInfo>): GrabbedCard? {
+    memberBounds.values.firstOrNull { it.rect.contains(fingerRoot) }?.let {
+        return GrabbedCard(key = entityItemKey(it.entityId), rect = it.rect)
+    }
+    visibleItems.firstOrNull { it.rootRect(containerOrigin).contains(fingerRoot) }?.let { info ->
+        val key = info.key as? String ?: return null
+        return GrabbedCard(key = key, rect = info.rootRect(containerOrigin))
+    }
+    return null
+}
+
+/**
+ * Resolves [fingerRoot] to a [DropZone]. When the dragged entity can join a light group
+ * ([draggedIsLight]) and the finger is inside an expanded group's frame, it resolves to the member
+ * whose cell actually **contains** the finger (or [DropZone.GroupInterior] over the dead space between
+ * them). Using contains rather than nearest-member is deliberate: it leaves the inter-member gaps,
+ * controller, and trailing slot as a dead zone so the order doesn't flip back and forth as the cards
+ * reflow under a hovering finger. Otherwise the group is treated as an ordinary top-level cell so a
+ * group (or a non-light) can still be reordered past it. The dragged card's own slot is skipped.
+ */
+private fun OverviewDragState.dropZoneFor(
+    fingerRoot: Offset,
+    visibleItems: List<LazyGridItemInfo>,
+    draggedKey: String,
+    draggedIsLight: Boolean,
+): DropZone {
+    if (draggedIsLight) {
+        val group = groupContentBounds.entries.firstOrNull { it.value.contains(fingerRoot) }
+        if (group != null) {
+            val over = memberBounds.values.firstOrNull {
+                it.groupId == group.key &&
+                    entityItemKey(it.entityId) != draggedKey &&
+                    it.rect.contains(fingerRoot)
+            }
+            return if (over != null) DropZone.Member(group.key, over.entityId) else DropZone.GroupInterior(group.key)
+        }
+    }
+    val cell = visibleItems.firstOrNull {
+        it.key != draggedKey && it.rootRect(containerOrigin).contains(fingerRoot)
+    } ?: return DropZone.None
+    val key = cell.key as? String ?: return DropZone.None
+    val rect = cell.rootRect(containerOrigin)
+    val relX = (fingerRoot.x - rect.left) / rect.width
+    val relY = (fingerRoot.y - rect.top) / rect.height
+    return DropZone.TopLevel(key = key, isCenter = relX in 0.25f..0.75f && relY in 0.25f..0.75f)
+}
+
+/**
+ * A single light-group member cell. Outside edit mode it is an ordinary interactive [LightEntityCard];
+ * in edit mode it registers with the shared [dragState] (so the screen-level gesture can pick it up
+ * and hit-test drops against it), slides between rows as a live reorder relocates it, and renders
+ * invisibly while it is the card being dragged (the floating overlay draws the lifted copy instead).
  */
 @Composable
-private fun Modifier.editDragHandle(
-    sourceKey: String,
-    displayItems: List<OverviewDisplayItem>,
-    visibleItemsInfoProvider: () -> List<LazyGridItemInfo>,
-    onDragStateChange: (Boolean) -> Unit,
-    onDragTranslationChange: (Offset) -> Unit,
-    onDragStart: (sourceKey: String) -> Unit,
-    onDragPreview: (sourceKey: String, targetKey: String?, isGrouping: Boolean) -> Unit,
-    onDragCommit: (sourceKey: String, targetKey: String, isGrouping: Boolean) -> Unit,
-    onDragCancel: () -> Unit,
+private fun GroupMemberCard(
+    entity: Entity,
+    groupId: String,
+    accentColor: Color,
+    isEditMode: Boolean,
+    dragState: OverviewDragState,
+    onToggle: () -> Unit,
+    onBrightnessChange: (brightness: Float, immediate: Boolean) -> Unit,
+    onOpenDetail: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LightEntityCard(
+        entity = entity,
+        onToggle = onToggle,
+        onBrightnessChange = onBrightnessChange,
+        onOpenDetail = onOpenDetail,
+        enabled = !isEditMode,
+        accentColor = accentColor,
+        modifier = modifier.groupMemberSlot(
+            entityId = entity.entityId,
+            groupId = groupId,
+            enabled = isEditMode,
+            dragState = dragState,
+        ),
+    )
+}
+
+/**
+ * Registers a light-group member with the shared [dragState] and animates it between its settled
+ * positions as a live reorder moves it (standing in for [LazyVerticalGrid]'s `animateItem()` inside
+ * [ExpandedLightGroupCard]'s hand-built, non-lazy layout). While this member is the one being dragged
+ * it renders invisibly, since [DraggedCardOverlay] draws the lifted card instead. Its root-space
+ * bounds are unregistered when it leaves so a stale rectangle can't keep reading as a live drop
+ * target. Outside edit mode ([enabled] = false) it adds nothing.
+ */
+@Composable
+private fun Modifier.groupMemberSlot(
+    entityId: String,
+    groupId: String,
+    enabled: Boolean,
+    dragState: OverviewDragState,
 ): Modifier {
+    if (!enabled) return this
+    val isDragged = dragState.draggedKey == entityItemKey(entityId)
+    DisposableEffect(entityId) {
+        onDispose { dragState.memberBounds.remove(entityId) }
+    }
+    return this
+        // Records the settled home cell in root space (before animateMemberPlacement's own offset, so
+        // it reports the placed slot, not the mid-slide position). Used to pick the member up and to
+        // hit-test drops onto it.
+        .onGloballyPositioned {
+            dragState.memberBounds[entityId] =
+                MemberSlot(groupId = groupId, entityId = entityId, rect = it.boundsInRoot())
+        }
+        .animateMemberPlacement(
+            enabled = !isDragged,
+            groupOrigin = { dragState.groupContentBounds[groupId]?.topLeft },
+        )
+        .graphicsLayer { alpha = if (isDragged) 0f else 1f }
+}
+
+/**
+ * The single, screen-level long-press-drag gesture for the whole overview grid. Because this node
+ * lives on the stable grid container it survives every membership change a drag triggers, which is
+ * what lets one continuous gesture carry a card across the top-level/group boundary.
+ *
+ * On long-press it hit-tests [OverviewDragState.grabbedCardAt] to pick up whichever card is under the
+ * finger. As the finger moves it resolves a [DropZone] and applies the matching move **live** — a
+ * top-level reorder ([onMoveItem]), a within-group reorder ([onMoveGroupMember]), pulling a member out
+ * to the grid ([onMoveEntityOutOfGroup]), or dropping a light into a group ([onMoveEntityIntoGroup]) —
+ * so the grid and groups shuffle under the drag. A move fires only when the resolved zone's identity
+ * changes, so a stationary hover doesn't thrash. Merging is destructive, so a centre-hover over a
+ * light (or a collapsed group) only previews the "＋" affordance and commits via [onMergeCommit] on
+ * release; dragging a member out into empty space arms removal ([onRemoveEntityFromGroup]).
+ *
+ * Everything captured is read through [rememberUpdatedState] so the gesture coroutine — kept alive for
+ * the whole session by `pointerInput(Unit)` — always sees the latest grid snapshot without restarting.
+ */
+@Composable
+private fun Modifier.overviewDragDetector(
+    enabled: Boolean,
+    dragState: OverviewDragState,
+    displayItems: List<OverviewDisplayItem>,
+    entityById: Map<String, Entity>,
+    visibleItemsInfoProvider: () -> List<LazyGridItemInfo>,
+    onMoveItem: (fromKey: String, toKey: String) -> Unit,
+    onMoveGroupMember: (groupId: String, fromEntityId: String, toEntityId: String) -> Unit,
+    onMoveEntityIntoGroup: (entityId: String, groupId: String, targetEntityId: String) -> Unit,
+    onMoveEntityOutOfGroup: (groupId: String, entityId: String, targetKey: String) -> Unit,
+    onMergeCommit: (sourceKey: String, targetKey: String) -> Unit,
+    onRemoveEntityFromGroup: (groupId: String, entityId: String) -> Unit,
+): Modifier {
+    val haptic = LocalHapticFeedback.current
     val currentDisplayItems by rememberUpdatedState(displayItems)
-    val currentVisibleItemsInfoProvider by rememberUpdatedState(visibleItemsInfoProvider)
-    val currentOnDragStateChange by rememberUpdatedState(onDragStateChange)
-    val currentOnDragTranslationChange by rememberUpdatedState(onDragTranslationChange)
-    val currentOnDragStart by rememberUpdatedState(onDragStart)
-    val currentOnDragPreview by rememberUpdatedState(onDragPreview)
-    val currentOnDragCommit by rememberUpdatedState(onDragCommit)
-    val currentOnDragCancel by rememberUpdatedState(onDragCancel)
-    return pointerInput(sourceKey) {
-        var dragOffset = Offset.Zero
-        var dragStartCenter = Offset.Zero
-        var latestDrop: GridDropTarget? = null
+    val currentEntityById by rememberUpdatedState(entityById)
+    val currentVisibleItems by rememberUpdatedState(visibleItemsInfoProvider)
+    val currentOnMoveItem by rememberUpdatedState(onMoveItem)
+    val currentOnMoveGroupMember by rememberUpdatedState(onMoveGroupMember)
+    val currentOnMoveEntityIntoGroup by rememberUpdatedState(onMoveEntityIntoGroup)
+    val currentOnMoveEntityOutOfGroup by rememberUpdatedState(onMoveEntityOutOfGroup)
+    val currentOnMergeCommit by rememberUpdatedState(onMergeCommit)
+    val currentOnRemoveEntityFromGroup by rememberUpdatedState(onRemoveEntityFromGroup)
+    if (!enabled) return this
+    return this.pointerInput(Unit) {
+        // The zone the dragged card was last moved onto; a move fires only when this changes, so a
+        // stationary hover over one cell doesn't re-shuffle every frame.
+        var lastZoneId: String? = null
         detectDragGesturesAfterLongPress(
-            onDragStart = {
-                dragOffset = Offset.Zero
-                dragStartCenter = currentVisibleItemsInfoProvider()
-                    .firstOrNull { it.key == sourceKey }
-                    ?.centerOffset()
-                    ?: Offset.Zero
-                latestDrop = null
-                currentOnDragStateChange(true)
-                currentOnDragTranslationChange(Offset.Zero)
-                currentOnDragStart(sourceKey)
-            },
-            onDrag = { change, dragAmount ->
-                change.consume()
-                dragOffset += dragAmount
-                val visibleItems = currentVisibleItemsInfoProvider()
-                val dropPoint = dragStartCenter + dragOffset
-                latestDrop = visibleItems.targetDropFor(sourceKey, dropPoint)
-                val targetKey = latestDrop?.key
-                val isGrouping = targetKey != null &&
-                    currentDisplayItems.isGroupDrop(sourceKey, targetKey, latestDrop?.isCenterDrop == true)
-                currentOnDragPreview(sourceKey, targetKey, isGrouping)
-                val currentCenter = visibleItems.firstOrNull { it.key == sourceKey }?.centerOffset()
-                currentOnDragTranslationChange(
-                    if (currentCenter != null) {
-                        dropPoint - currentCenter
-                    } else {
-                        dragOffset
-                    },
-                )
-            },
-            onDragEnd = {
-                currentOnDragStateChange(false)
-                currentOnDragTranslationChange(Offset.Zero)
-                val targetKey = latestDrop?.key
-                if (targetKey != null && targetKey != sourceKey) {
-                    val isGrouping =
-                        currentDisplayItems.isGroupDrop(sourceKey, targetKey, latestDrop?.isCenterDrop == true)
-                    currentOnDragPreview(sourceKey, null, false)
-                    currentOnDragCommit(sourceKey, targetKey, isGrouping)
+            onDragStart = { localPos ->
+                val fingerRoot = dragState.containerOrigin + localPos
+                val grabbed = dragState.grabbedCardAt(fingerRoot, currentVisibleItems())
+                if (grabbed != null) {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    dragState.draggedKey = grabbed.key
+                    dragState.draggedSize = grabbed.rect.size
+                    dragState.grabOffset = fingerRoot - grabbed.rect.topLeft
+                    dragState.fingerRoot = fingerRoot
+                    dragState.mergeTargetKey = null
+                    dragState.inRemoveZone = false
+                    lastZoneId = null
                 } else {
-                    currentOnDragPreview(sourceKey, null, false)
-                    currentOnDragCancel()
+                    dragState.reset()
                 }
             },
-            onDragCancel = {
-                dragOffset = Offset.Zero
-                currentOnDragStateChange(false)
-                currentOnDragTranslationChange(Offset.Zero)
-                currentOnDragPreview(sourceKey, null, false)
-                currentOnDragCancel()
+            onDrag = { change, dragAmount ->
+                val draggedKey = dragState.draggedKey
+                if (draggedKey != null) {
+                    change.consume()
+                    dragState.fingerRoot += dragAmount
+                    val entityId = draggedKey.entityIdOrNull()
+                    val zone = dragState.dropZoneFor(
+                        fingerRoot = dragState.fingerRoot,
+                        visibleItems = currentVisibleItems(),
+                        draggedKey = draggedKey,
+                        draggedIsLight = currentEntityById[draggedKey]?.domain == "light",
+                    )
+                    if (zone.id != lastZoneId) {
+                        lastZoneId = zone.id
+                        val sourceGroupId = entityId?.let { currentDisplayItems.groupIdContaining(it) }
+                        when (zone) {
+                            is DropZone.Member -> {
+                                dragState.mergeTargetKey = null
+                                dragState.inRemoveZone = false
+                                if (entityId != null && zone.entityId != entityId) {
+                                    if (sourceGroupId == zone.groupId) {
+                                        currentOnMoveGroupMember(zone.groupId, entityId, zone.entityId)
+                                    } else {
+                                        currentOnMoveEntityIntoGroup(entityId, zone.groupId, zone.entityId)
+                                    }
+                                }
+                            }
+
+                            is DropZone.GroupInterior -> {
+                                // Hovering a group's dead space (gaps / controller / trailing): hold the
+                                // current order and don't arm removal — the finger is still inside a group.
+                                dragState.mergeTargetKey = null
+                                dragState.inRemoveZone = false
+                            }
+
+                            is DropZone.TopLevel -> {
+                                dragState.inRemoveZone = false
+                                val mergeable = sourceGroupId == null &&
+                                    zone.isCenter &&
+                                    currentDisplayItems.isGroupDrop(draggedKey, zone.key, isCenterDrop = true)
+                                if (mergeable) {
+                                    dragState.mergeTargetKey = zone.key
+                                } else {
+                                    dragState.mergeTargetKey = null
+                                    if (zone.key != draggedKey) {
+                                        if (entityId != null && sourceGroupId != null) {
+                                            currentOnMoveEntityOutOfGroup(sourceGroupId, entityId, zone.key)
+                                        } else {
+                                            currentOnMoveItem(draggedKey, zone.key)
+                                        }
+                                    }
+                                }
+                            }
+
+                            is DropZone.None -> {
+                                dragState.mergeTargetKey = null
+                                dragState.inRemoveZone = entityId != null && sourceGroupId != null
+                            }
+                        }
+                    }
+                }
             },
+            onDragEnd = {
+                val draggedKey = dragState.draggedKey
+                val entityId = draggedKey?.entityIdOrNull()
+                val mergeTarget = dragState.mergeTargetKey
+                val removeGroupId = if (dragState.inRemoveZone && entityId != null) {
+                    currentDisplayItems.groupIdContaining(entityId)
+                } else {
+                    null
+                }
+                if (draggedKey != null && mergeTarget != null) {
+                    currentOnMergeCommit(draggedKey, mergeTarget)
+                } else if (entityId != null && removeGroupId != null) {
+                    currentOnRemoveEntityFromGroup(removeGroupId, entityId)
+                }
+                dragState.reset()
+            },
+            onDragCancel = { dragState.reset() },
         )
     }
 }
 
-private data class GridDropTarget(val key: String, val isCenterDrop: Boolean)
-
 /**
- * A local, self-contained long-press-drag gesture for a single group member card that removes it
- * from the group when dragged past [GROUP_MEMBER_REMOVE_DRAG_THRESHOLD] on either axis. Unlike
- * [editDragHandle], this is deliberately NOT wired into the grid-level [LazyGridItemInfo] system:
- * member cards rendered inside an expanded group have no corresponding grid item, so there is
- * nothing for a grid-level drag to reference. [pointerInput] is keyed on [entityId] (matching the
- * idiom already used by [LightEntityCard]'s own internal gesture), not the enclosing group, so the
- * gesture is not restarted by unrelated group changes.
+ * The floating card that follows the finger during a drag, drawn on top of the whole grid (a sibling
+ * after the [LazyVerticalGrid]) so it reads as lifted above every cell no matter where the dragged
+ * item currently lives — its source cell renders invisibly meanwhile. It is a faithful copy of the
+ * dragged card (same size and domain rendering) with the usual lift treatment: scale, shadow and a
+ * slight tilt, plus a translucency that lets a merge target's "＋" read through it and fades further
+ * when releasing would pull a member out of its group.
  */
 @Composable
-private fun Modifier.dragOutToRemoveFromGroup(entityId: String, enabled: Boolean, onRemove: () -> Unit): Modifier {
-    if (!enabled) return this
-    var dragOffset by remember(entityId) { mutableStateOf(Offset.Zero) }
-    val haptic = LocalHapticFeedback.current
-    val currentOnRemove by rememberUpdatedState(onRemove)
-    val thresholdPx = with(LocalDensity.current) { GROUP_MEMBER_REMOVE_DRAG_THRESHOLD.toPx() }
-    return this
-        .graphicsLayer {
-            val dragFraction = (maxOf(abs(dragOffset.x), abs(dragOffset.y)) / thresholdPx).coerceIn(0f, 1f)
-            translationX = dragOffset.x
-            translationY = dragOffset.y
-            alpha = 1f - dragFraction * 0.5f
-            scaleX = 1f - dragFraction * 0.1f
-            scaleY = 1f - dragFraction * 0.1f
-        }
-        .pointerInput(entityId) {
-            detectDragGesturesAfterLongPress(
-                onDragStart = {
-                    dragOffset = Offset.Zero
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                },
-                onDrag = { change, dragAmount ->
-                    change.consume()
-                    dragOffset += dragAmount
-                },
-                onDragEnd = {
-                    val shouldRemove = abs(dragOffset.x) > thresholdPx || abs(dragOffset.y) > thresholdPx
-                    dragOffset = Offset.Zero
-                    if (shouldRemove) currentOnRemove()
-                },
-                onDragCancel = {
-                    dragOffset = Offset.Zero
-                },
+private fun BoxScope.DraggedCardOverlay(
+    dragState: OverviewDragState,
+    displayItems: List<OverviewDisplayItem>,
+    entityById: Map<String, Entity>,
+    displayedAsLightEntityIds: Set<String>,
+) {
+    val draggedKey = dragState.draggedKey ?: return
+    val size = dragState.draggedSize
+    if (size == Size.Zero) return
+    val density = LocalDensity.current
+    val defaultLightAccent = LocalHAColorScheme.current.colorFillLightLoudResting
+
+    val overlayAlpha by animateFloatAsState(
+        targetValue = when {
+            dragState.inRemoveZone -> GROUP_MEMBER_REMOVE_ALPHA
+            dragState.mergeTargetKey != null -> DRAG_LIFT_ALPHA
+            else -> DRAG_OVERLAY_RESTING_ALPHA
+        },
+        label = "drag_overlay_alpha",
+    )
+
+    val draggedGroup = displayItems.filterIsInstance<OverviewDisplayItem.Group>().firstOrNull { it.key == draggedKey }
+    val draggedEntity = entityById[draggedKey]
+    val memberAccent = draggedKey.entityIdOrNull()?.let { id ->
+        displayItems.filterIsInstance<OverviewDisplayItem.Group>()
+            .firstOrNull { group -> group.entities.any { it.entityId == id } }
+            ?.group
+            ?.accentColor()
+    }
+
+    Box(
+        modifier = Modifier
+            .size(
+                width = with(density) { size.width.toDp() },
+                height = with(density) { size.height.toDp() },
+            )
+            .graphicsLayer {
+                val topLeft = dragState.fingerRoot - dragState.grabOffset - dragState.containerOrigin
+                translationX = topLeft.x
+                translationY = topLeft.y
+                scaleX = DRAG_LIFT_SCALE
+                scaleY = DRAG_LIFT_SCALE
+                rotationZ = DRAG_LIFT_ROTATION_DEGREES
+                shadowElevation = DRAG_LIFT_ELEVATION
+                alpha = overlayAlpha
+            },
+    ) {
+        when {
+            draggedGroup != null -> LightGroupCard(
+                group = draggedGroup.group,
+                entities = draggedGroup.entities,
+                isExpanded = false,
+                accentColor = draggedGroup.group.accentColor(),
+                onExpandedChange = {},
+                onToggle = {},
+                onBrightnessChange = { _, _ -> },
+                onOpenDetail = {},
+                enabled = false,
+            )
+
+            draggedEntity != null && draggedEntity.domain == "light" -> LightEntityCard(
+                entity = draggedEntity,
+                onToggle = {},
+                onBrightnessChange = { _, _ -> },
+                onOpenDetail = {},
+                enabled = false,
+                accentColor = memberAccent ?: defaultLightAccent,
+            )
+
+            draggedEntity != null -> OverviewEntityItemContent(
+                entity = draggedEntity,
+                isEditMode = true,
+                displayedAsLightEntityIds = displayedAsLightEntityIds,
+                onToggleEntity = {},
+                onBrightnessChange = { _, _, _ -> },
+                onOpenEntityDetail = {},
+                onTriggerAutomation = {},
+                onSetFanSpeed = { _, _, _ -> },
+                onSetCoverPosition = { _, _, _ -> },
+                onStopCover = {},
+                onCycleClimateHvacMode = {},
+                onSetClimateTemperature = { _, _, _ -> },
+                onTogglePlayback = {},
+                onSetMediaVolume = { _, _, _ -> },
+                onSkipToPreviousTrack = {},
+                onSkipToNextTrack = {},
+                onSetHumidifierHumidity = { _, _, _ -> },
+                onCycleHumidifierMode = {},
             )
         }
+    }
 }
 
-private val GROUP_MEMBER_REMOVE_DRAG_THRESHOLD = 72.dp
-
-private fun List<LazyGridItemInfo>.targetDropFor(sourceKey: String, dropPoint: Offset): GridDropTarget? {
-    val target = firstOrNull { item ->
-        item.key != sourceKey &&
-            dropPoint.x >= item.offset.x &&
-            dropPoint.x <= item.offset.x + item.size.width &&
-            dropPoint.y >= item.offset.y &&
-            dropPoint.y <= item.offset.y + item.size.height
-    } ?: return null
-    val relativeX = (dropPoint.x - target.offset.x) / target.size.width.toFloat()
-    val relativeY = (dropPoint.y - target.offset.y) / target.size.height.toFloat()
-    val targetKey = target.key as? String ?: return null
-    return GridDropTarget(
-        key = targetKey,
-        isCenterDrop = relativeX in 0.25f..0.75f && relativeY in 0.25f..0.75f,
-    )
+/**
+ * Animates this card between its settled positions so it slides when a live reorder moves it,
+ * standing in for [LazyVerticalGrid]'s `animateItem()` inside [ExpandedLightGroupCard]'s hand-built
+ * (non-lazy) layout. [onGloballyPositioned] — placed before the animating [offset], so it reports the
+ * settled position rather than the mid-animation one — records the target, and the offset draws the
+ * card stepping toward it. The first placement snaps (no intro slide); [enabled] is false for the
+ * card currently being dragged, which is glued to the finger instead.
+ *
+ * Placement is measured **relative to the group's own origin** ([groupOrigin] = the expanded card's
+ * root-space top-left) rather than in absolute root space. Scrolling the overview moves the whole
+ * group — and every member's root position with it — by the same amount, so a group-relative
+ * position is invariant under scroll and the placement spring stays idle. Measuring in absolute root
+ * space instead (the previous behavior) made every member chase its own scrolling root position, so
+ * the members visibly lagged behind the controller and frame while the list scrolled. Only a real
+ * reorder moves a member *relative to* the group, and only that now retriggers the slide.
+ *
+ * [groupOrigin] returns null until the group has been positioned; while it (or this card's own home)
+ * is unknown the card simply sits at its laid-out spot with no offset.
+ */
+@Composable
+private fun Modifier.animateMemberPlacement(enabled: Boolean, groupOrigin: () -> Offset?): Modifier {
+    var homeRoot by remember { mutableStateOf<Offset?>(null) }
+    var initialized by remember { mutableStateOf(false) }
+    val animated = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
+    LaunchedEffect(Unit) {
+        snapshotFlow {
+            val home = homeRoot ?: return@snapshotFlow null
+            val origin = groupOrigin() ?: return@snapshotFlow null
+            home - origin
+        }.collect { relative ->
+            if (relative == null) return@collect
+            if (!initialized) {
+                animated.snapTo(relative)
+                initialized = true
+            } else if (animated.targetValue != relative) {
+                animated.animateTo(
+                    targetValue = relative,
+                    animationSpec = spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow),
+                )
+            }
+        }
+    }
+    return this
+        .onGloballyPositioned { homeRoot = it.positionInRoot() }
+        .offset {
+            val home = homeRoot
+            val origin = groupOrigin()
+            if (!enabled || !initialized || home == null || origin == null) {
+                IntOffset.Zero
+            } else {
+                (animated.value - (home - origin)).round()
+            }
+        }
 }
 
-private fun LazyGridItemInfo.centerOffset(): Offset = Offset(
-    x = offset.x + size.width / 2f,
-    y = offset.y + size.height / 2f,
-)
+// How faded the lifted member card becomes once it has been dragged out past the group's bounds, so
+// the user can see that releasing now will remove it from the group rather than just reorder it.
+private const val GROUP_MEMBER_REMOVE_ALPHA = 0.3f
+
+// Visual feedback applied to a card while it is being dragged in edit mode, and to a card the drag
+// is hovering over as a drop target.
+private const val DRAG_LIFT_SCALE = 1.08f
+private const val DROP_TARGET_SCALE = 1.04f
+private const val DRAG_LIFT_ELEVATION = 16f
+private const val DRAG_LIFT_ROTATION_DEGREES = 2f
+private const val DRAG_LIFT_ALPHA = 0.55f
+
+// Opacity of the floating drag overlay at rest. Kept nearly opaque so the lifted card reads as solid,
+// dropping to [DRAG_LIFT_ALPHA] over a merge target (so its "＋" reads through) and to
+// [GROUP_MEMBER_REMOVE_ALPHA] once dragged out far enough that releasing would remove the member.
+private const val DRAG_OVERLAY_RESTING_ALPHA = 0.94f
 
 private fun List<OverviewDisplayItem>.shouldGroupDrop(sourceKey: String, targetKey: String): Boolean {
     val source = firstOrNull { it.key == sourceKey }
@@ -1412,7 +1808,7 @@ private data class BorrowedNeighbors(val items: List<OverviewDisplayItem>, val b
  * current [displayItems] order.
  *
  * A borrowed item has no top-level grid cell for as long as it's borrowed, so it's temporarily not
- * reachable through [editDragHandle]'s [LazyGridItemInfo]-based drag system — an accepted
+ * reachable through the [LazyGridItemInfo]-based hit-testing the drag detector uses — an accepted
  * limitation, since the grid reflows and it becomes draggable again as soon as it's no longer the
  * borrowed item for that row.
  */
@@ -1487,72 +1883,105 @@ private fun LightGroupEditorDialog(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = if (it.isBlank()) "" else it },
-                    label = { Text(stringResource(commonR.string.overview_group_name)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = stringResource(commonR.string.overview_group_color),
-                        color = LocalHAColorScheme.current.colorTextPrimary,
+            // Everything lives in one LazyColumn so the full-colour wheel, presets and the member
+            // list scroll together as a single surface (a plain Column can't host the nested member
+            // list, and the wheel makes the content taller than the dialog on shorter screens).
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.heightIn(max = 520.dp),
+            ) {
+                item {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = if (it.isBlank()) "" else it },
+                        label = { Text(stringResource(commonR.string.overview_group_name)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        GroupColorOptions.forEach { colorArgb ->
-                            val selected = selectedColorArgb == colorArgb
+                }
+
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = stringResource(commonR.string.overview_group_color),
+                                color = LocalHAColorScheme.current.colorTextPrimary,
+                            )
+                            // Live preview of the picked colour.
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
-                                    .background(Color(colorArgb), RoundedCornerShape(14.dp))
+                                    .size(28.dp)
+                                    .background(Color(selectedColorArgb), CircleShape)
                                     .border(
-                                        width = if (selected) 3.dp else 1.dp,
-                                        color = if (selected) {
-                                            LocalHAColorScheme.current.colorTextPrimary
-                                        } else {
-                                            LocalHAColorScheme.current.colorTextDisabled.copy(alpha = 0.4f)
-                                        },
-                                        shape = RoundedCornerShape(14.dp),
-                                    )
-                                    .clickable { selectedColorArgb = colorArgb },
+                                        1.dp,
+                                        LocalHAColorScheme.current.colorTextDisabled.copy(alpha = 0.4f),
+                                        CircleShape,
+                                    ),
                             )
+                        }
+                        ColorWheel(
+                            selectedColor = Color(selectedColorArgb),
+                            onColorSelected = { selectedColorArgb = it.toArgb().toLong() and 0xFFFFFFFFL },
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        )
+                        // Preset quick-picks for the common accents, kept alongside the wheel.
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        ) {
+                            GroupColorOptions.forEach { colorArgb ->
+                                val selected = selectedColorArgb == colorArgb
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(Color(colorArgb), CircleShape)
+                                        .border(
+                                            width = if (selected) 3.dp else 1.dp,
+                                            color = if (selected) {
+                                                LocalHAColorScheme.current.colorTextPrimary
+                                            } else {
+                                                LocalHAColorScheme.current.colorTextDisabled.copy(alpha = 0.4f)
+                                            },
+                                            shape = CircleShape,
+                                        )
+                                        .clickable { selectedColorArgb = colorArgb },
+                                )
+                            }
                         }
                     }
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = stringResource(commonR.string.overview_group_members),
-                        color = LocalHAColorScheme.current.colorTextPrimary,
-                    )
-                    Text(
-                        text = stringResource(commonR.string.overview_selected_lights, selectedEntityIds.size),
-                        color = LocalHAColorScheme.current.colorTextSecondary,
-                    )
-                }
-
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.heightIn(max = 360.dp),
-                ) {
-                    items(lightEntities, key = { it.entityId }) { entity ->
-                        val selected = entity.entityId in selectedEntityIds
-                        LightGroupPickerEntityCard(
-                            entity = entity,
-                            selected = selected,
-                            onClick = {
-                                selectedEntityIds = if (selected) {
-                                    selectedEntityIds - entity.entityId
-                                } else {
-                                    selectedEntityIds + entity.entityId
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = stringResource(commonR.string.overview_group_members),
+                            color = LocalHAColorScheme.current.colorTextPrimary,
+                        )
+                        Text(
+                            text = stringResource(commonR.string.overview_selected_lights, selectedEntityIds.size),
+                            color = LocalHAColorScheme.current.colorTextSecondary,
                         )
                     }
+                }
+
+                items(lightEntities, key = { it.entityId }) { entity ->
+                    val selected = entity.entityId in selectedEntityIds
+                    LightGroupPickerEntityCard(
+                        entity = entity,
+                        selected = selected,
+                        onClick = {
+                            selectedEntityIds = if (selected) {
+                                selectedEntityIds - entity.entityId
+                            } else {
+                                selectedEntityIds + entity.entityId
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
         },

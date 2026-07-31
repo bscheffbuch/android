@@ -11,10 +11,10 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import dagger.hilt.android.AndroidEntryPoint
 import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.theme.HATheme
 import io.homeassistant.companion.android.common.util.isAutomotive
 import io.homeassistant.companion.android.settings.addHelpMenuProvider
 import io.homeassistant.companion.android.settings.vehicle.views.AndroidAutoFavoritesSettings
-import io.homeassistant.companion.android.util.compose.HomeAssistantAppTheme
 
 @AndroidEntryPoint
 class ManageAndroidAutoSettingsFragment : Fragment() {
@@ -25,7 +25,7 @@ class ManageAndroidAutoSettingsFragment : Fragment() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return ComposeView(requireContext()).apply {
             setContent {
-                HomeAssistantAppTheme {
+                HATheme {
                     AndroidAutoFavoritesSettings(
                         androidAutoViewModel = viewModel,
                         serversList = viewModel.servers,

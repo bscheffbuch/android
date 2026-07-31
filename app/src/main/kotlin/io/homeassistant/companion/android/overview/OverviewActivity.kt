@@ -60,6 +60,15 @@ class OverviewActivity : BaseActivity() {
                     onRemoveEntityFromGroup = { groupId, entityId ->
                         viewModel.removeLightFromGroup(groupId, entityId)
                     },
+                    onMoveGroupMember = { groupId, fromEntityId, toEntityId ->
+                        viewModel.moveGroupMember(groupId, fromEntityId, toEntityId)
+                    },
+                    onMoveEntityIntoGroup = { entityId, groupId, targetEntityId ->
+                        viewModel.moveEntityIntoGroup(entityId, groupId, targetEntityId)
+                    },
+                    onMoveEntityOutOfGroup = { groupId, entityId, targetKey ->
+                        viewModel.moveEntityOutOfGroup(groupId, entityId, targetKey)
+                    },
                     onGroupExpandedChange = { groupId, expanded -> viewModel.setLightGroupExpanded(groupId, expanded) },
                     onSetDisplayedAsLight = { entityId, asLight -> viewModel.setDisplayedAsLight(entityId, asLight) },
                     onTriggerAutomation = { entityId -> viewModel.triggerAutomation(entityId) },

@@ -20,7 +20,14 @@
         <FrameLayout
             android:id="@+id/content"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/bottomNavComposeView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
     </LinearLayout>
 
     <!-- Useful for screen that already have a topbar built-in -->

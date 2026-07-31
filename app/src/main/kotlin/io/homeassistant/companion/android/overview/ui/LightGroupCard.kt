@@ -98,47 +98,75 @@ fun LightGroupCard(
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 if (down.position.x >= size.width - expandHitWidthPx) {
-                    down.consume()
-                    onExpandedChange(!isExpanded)
-                    var waiting = true
-                    while (waiting) {
+                    // Toggle on release (tap up), not on press, so it behaves like a normal button:
+                    // a press that turns into a scroll, or a finger that slides off the chevron before
+                    // lifting, leaves the group as it was instead of flipping it the instant it is
+                    // touched. The down is left unconsumed so a scroll starting here still scrolls.
+                    var released = false
+                    while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Main)
-                        event.changes.forEach { it.consume() }
-                        if (event.changes.all { !it.pressed }) waiting = false
+                        val change = event.changes.firstOrNull() ?: break
+                        val movedBeyondSlop =
+                            abs(change.position.x - down.position.x) > viewConfiguration.touchSlop ||
+                                abs(change.position.y - down.position.y) > viewConfiguration.touchSlop
+                        if (movedBeyondSlop) break
+                        if (!change.pressed) {
+                            change.consume()
+                            released = true
+                            break
+                        }
                     }
+                    if (released) onExpandedChange(!isExpanded)
                     return@awaitEachGesture
                 }
                 val startX = down.position.x
                 val startY = down.position.y
                 val brightnessAtGestureStart = displayBrightness
-                var dragStarted = false
                 var yieldedToScroll = false
 
-                val result = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                    var active = true
-                    while (active) {
-                        val event = awaitPointerEvent(PointerEventPass.Main)
-                        val change = event.changes.firstOrNull() ?: return@withTimeoutOrNull null
-                        if (!change.pressed) {
-                            active = false
-                        } else {
+                // Classify the gesture: true = brightness drag, false = tap (toggle), null = long
+                // press (open detail). The long-press timeout is applied per event *gap* rather than
+                // once for the whole gesture, so it only fires when the finger is genuinely held
+                // still — a slow or slightly-delayed horizontal slide keeps producing move events
+                // that restart the timeout and so still adjusts brightness instead of being hijacked
+                // into opening the detail sheet.
+                var result: Boolean? = false
+                var deciding = true
+                while (deciding) {
+                    val event = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                        awaitPointerEvent(PointerEventPass.Main)
+                    }
+                    val change = event?.changes?.firstOrNull()
+                    when {
+                        // No pointer event for a full timeout => finger held still => long press.
+                        event == null -> {
+                            result = null
+                            deciding = false
+                        }
+
+                        change == null || !change.pressed -> {
+                            result = false // released without dragging => tap => toggle
+                            deciding = false
+                        }
+
+                        else -> {
                             val dx = change.position.x - startX
                             val dy = change.position.y - startY
-                            if (!dragStarted) {
-                                if (abs(dx) > viewConfiguration.touchSlop && abs(dx) >= abs(dy)) {
-                                    dragStarted = true
-                                    isDragging = true
-                                    return@withTimeoutOrNull true
-                                } else if (abs(dy) > viewConfiguration.touchSlop) {
-                                    // Predominantly vertical movement is a list scroll, not a card
-                                    // interaction — yield so the grid scrolls instead of us toggling.
-                                    yieldedToScroll = true
-                                    return@withTimeoutOrNull false
-                                }
+                            if (abs(dx) > viewConfiguration.touchSlop && abs(dx) >= abs(dy)) {
+                                isDragging = true
+                                result = true // horizontal drag => brightness
+                                deciding = false
+                            } else if (abs(dy) > viewConfiguration.touchSlop) {
+                                // Predominantly vertical movement is a list scroll, not a card
+                                // interaction — yield so the grid scrolls instead of us toggling.
+                                yieldedToScroll = true
+                                result = false
+                                deciding = false
                             }
+                            // Sub-slop movement: keep deciding; the next iteration restarts the
+                            // long-press timeout, so a moving finger never trips it.
                         }
                     }
-                    false
                 }
 
                 when {

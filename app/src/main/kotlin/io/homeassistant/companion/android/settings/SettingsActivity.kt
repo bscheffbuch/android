@@ -8,21 +8,22 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.viewModels
+import androidx.appcompat.widget.Toolbar
 import androidx.biometric.BiometricManager
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.IntentCompat
 import androidx.fragment.app.commit
 import androidx.lifecycle.lifecycleScope
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
 import dagger.hilt.android.AndroidEntryPoint
-import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.android.components.ActivityComponent
 import eightbitlab.com.blurview.BlurView
 import io.homeassistant.companion.android.BaseActivity
 import io.homeassistant.companion.android.R
 import io.homeassistant.companion.android.authenticator.Authenticator
 import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.theme.HATheme
 import io.homeassistant.companion.android.common.data.servers.ServerManager
+import io.homeassistant.companion.android.overview.ui.HomeBottomNavigationBar
+import io.homeassistant.companion.android.overview.ui.HomeContentTab
 import io.homeassistant.companion.android.settings.assist.AssistSettingsFragment
 import io.homeassistant.companion.android.settings.developer.DeveloperSettingsFragment
 import io.homeassistant.companion.android.settings.notification.NotificationHistoryFragment
@@ -38,6 +39,7 @@ import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 
 private const val EXTRA_FRAGMENT = "fragment"
+private const val EXTRA_SHOW_HOME_NAV_BAR = "show_home_nav_bar"
 
 @AndroidEntryPoint
 class SettingsActivity : BaseActivity() {
@@ -49,15 +51,28 @@ class SettingsActivity : BaseActivity() {
 
     private lateinit var authenticator: Authenticator
     private lateinit var blurView: BlurView
+    private lateinit var toolbar: Toolbar
 
     private var authenticating = false
     private var externalAuthCallback: ((Int) -> Boolean)? = null
 
     companion object {
-        fun newInstance(context: Context, screen: Deeplink? = null): Intent {
+        /** Key of the [HomeContentTab] extra set on the result [Intent] returned by [finish]. */
+        const val EXTRA_SELECTED_TAB = "selected_tab"
+
+        /**
+         * @param showHomeNavBar Whether to render [HomeBottomNavigationBar] at the bottom of this
+         * Activity, letting the caller be navigated back to a specific [HomeContentTab] via the
+         * activity result instead of a plain "up"/back navigation. Only set this for callers that
+         * host that same bar themselves, such as the native Overview landing screen.
+         */
+        fun newInstance(context: Context, screen: Deeplink? = null, showHomeNavBar: Boolean = false): Intent {
             return Intent(context, SettingsActivity::class.java).apply {
                 if (screen != null) {
                     putExtra(EXTRA_FRAGMENT, screen)
+                }
+                if (showHomeNavBar) {
+                    putExtra(EXTRA_SHOW_HOME_NAV_BAR, true)
                 }
             }
         }
@@ -75,22 +90,38 @@ class SettingsActivity : BaseActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val entryPoint = EntryPointAccessors.fromActivity(this, SettingsFragmentFactoryEntryPoint::class.java)
-        supportFragmentManager.fragmentFactory = entryPoint.getSettingsFragmentFactory()
-
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
         // Delegate bottom insets to the fragments
         findViewById<View>(R.id.root).applySafeDrawingInsets(applyBottom = false, consumeInsets = false)
 
-        setSupportActionBar(findViewById(R.id.toolbar))
+        toolbar = findViewById(R.id.toolbar)
+        setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         blurView = findViewById(R.id.blurView)
         blurView.setupWith(window.decorView.rootView as ViewGroup)
             .setBlurRadius(8f)
             .setBlurEnabled(false)
+
+        if (intent.getBooleanExtra(EXTRA_SHOW_HOME_NAV_BAR, false)) {
+            findViewById<ComposeView>(R.id.bottomNavComposeView).apply {
+                visibility = View.VISIBLE
+                setContent {
+                    HATheme {
+                        HomeBottomNavigationBar(
+                            selectedTab = null,
+                            onSelectHome = { finishWithSelectedTab(HomeContentTab.HOME) },
+                            onSelectAutomationsAndScenes = {
+                                finishWithSelectedTab(HomeContentTab.AUTOMATIONS_AND_SCENES)
+                            },
+                            onOpenSettings = {},
+                        )
+                    }
+                }
+            }
+        }
 
         authenticator = Authenticator(this, this, ::settingsActivityAuthenticationResult)
 
@@ -228,6 +259,16 @@ class SettingsActivity : BaseActivity() {
         viewModel.setAppActive(ServerManager.SERVER_ID_ACTIVE, active)
     }
 
+    /**
+     * Reports [tab] as the requested destination via the activity result and finishes this
+     * Activity, letting a caller that hosts [HomeBottomNavigationBar] itself switch to that tab
+     * instead of just resuming whatever tab was active before Settings was opened.
+     */
+    private fun finishWithSelectedTab(tab: HomeContentTab) {
+        setResult(RESULT_OK, Intent().putExtra(EXTRA_SELECTED_TAB, tab))
+        finish()
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             android.R.id.home -> {
@@ -236,6 +277,18 @@ class SettingsActivity : BaseActivity() {
             }
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    /**
+     * Shows or hides this Activity's legacy [Toolbar] chrome.
+     *
+     * [SettingsFragment] (the Settings overview screen) renders its own native
+     * `HATopBar` instead of relying on this Activity's shared toolbar, so it hides the toolbar
+     * while resumed and restores it when paused (e.g. navigating to another settings sub-screen,
+     * which still relies on this toolbar).
+     */
+    fun setLegacyToolbarVisible(visible: Boolean) {
+        toolbar.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
     fun requestAuthentication(title: String, callback: (Int) -> Boolean): Boolean {
@@ -249,12 +302,5 @@ class SettingsActivity : BaseActivity() {
 
             true
         }
-    }
-
-    /** Used to inject classes before [onCreate] */
-    @EntryPoint
-    @InstallIn(ActivityComponent::class)
-    interface SettingsFragmentFactoryEntryPoint {
-        fun getSettingsFragmentFactory(): SettingsFragmentFactory
     }
 }

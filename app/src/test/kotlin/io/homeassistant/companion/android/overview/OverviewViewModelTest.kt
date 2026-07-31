@@ -65,6 +65,9 @@ class OverviewViewModelTest {
         coEvery { serverManager.integrationRepository(any()) } returns integrationRepository
 
         val context = ApplicationProvider.getApplicationContext<Context>()
+        // Robolectric keeps SharedPreferences for the lifetime of the JVM, so light groups / item
+        // order saved by one test would leak into the next. Clear them so each test starts clean.
+        context.getSharedPreferences("overview_preferences", Context.MODE_PRIVATE).edit().clear().commit()
         viewModel = OverviewViewModel(serverManager, context)
     }
 
@@ -822,5 +825,204 @@ class OverviewViewModelTest {
         advanceUntilIdle()
 
         assertEquals(OverviewUiState.Success::class, viewModel.uiState.value::class)
+    }
+
+    private fun currentItemOrder(): List<String> = (viewModel.uiState.value as OverviewUiState.Success).itemOrder
+
+    @Test
+    fun `Given three items when moveItem drags the first onto the last then it is re-inserted after the last`() = runTest {
+        givenEntities(
+            entityOf("light.a", state = "on"),
+            entityOf("light.b", state = "on"),
+            entityOf("light.c", state = "on"),
+        )
+        val order = currentItemOrder()
+        assertEquals(3, order.size)
+
+        viewModel.moveItem(fromKey = order[0], toKey = order[2])
+        advanceUntilIdle()
+
+        assertEquals(listOf(order[1], order[2], order[0]), currentItemOrder())
+    }
+
+    @Test
+    fun `Given three items when moveItem drags the last onto the first then it is re-inserted before the first`() = runTest {
+        givenEntities(
+            entityOf("light.a", state = "on"),
+            entityOf("light.b", state = "on"),
+            entityOf("light.c", state = "on"),
+        )
+        val order = currentItemOrder()
+        assertEquals(3, order.size)
+
+        viewModel.moveItem(fromKey = order[2], toKey = order[0])
+        advanceUntilIdle()
+
+        assertEquals(listOf(order[2], order[0], order[1]), currentItemOrder())
+    }
+
+    @Test
+    fun `Given three items when moveItem drags an item onto itself then the order is unchanged`() = runTest {
+        givenEntities(
+            entityOf("light.a", state = "on"),
+            entityOf("light.b", state = "on"),
+            entityOf("light.c", state = "on"),
+        )
+        val order = currentItemOrder()
+
+        viewModel.moveItem(fromKey = order[1], toKey = order[1])
+        advanceUntilIdle()
+
+        assertEquals(order, currentItemOrder())
+    }
+
+    // Each group test uses its own light ids so a group persisted by another test is sanitized away
+    // when the current test loads a different entity set (its members are no longer present).
+    private fun groupContaining(entityId: String): OverviewLightGroup = (viewModel.uiState.value as OverviewUiState.Success).lightGroups.first { entityId in it.entityIds }
+
+    private suspend fun TestScope.givenGroupOf(vararg lightIds: String): OverviewLightGroup {
+        givenEntities(*lightIds.map { entityOf(it, state = "on") }.toTypedArray())
+        viewModel.saveLightGroup(groupId = null, name = "Group", entityIds = lightIds.toList(), colorArgb = null)
+        advanceUntilIdle()
+        return groupContaining(lightIds.first())
+    }
+
+    @Test
+    fun `Given a group of three members when moveGroupMember drags the first onto the last then it is re-inserted after the last`() = runTest {
+        val group = givenGroupOf("light.ga1", "light.gb1", "light.gc1")
+        val members = group.entityIds
+        assertEquals(3, members.size)
+
+        viewModel.moveGroupMember(group.id, fromEntityId = members[0], toEntityId = members[2])
+        advanceUntilIdle()
+
+        assertEquals(listOf(members[1], members[2], members[0]), groupContaining(members[0]).entityIds)
+    }
+
+    @Test
+    fun `Given a group of three members when moveGroupMember drags the last onto the first then it is re-inserted before the first`() = runTest {
+        val group = givenGroupOf("light.ga2", "light.gb2", "light.gc2")
+        val members = group.entityIds
+        assertEquals(3, members.size)
+
+        viewModel.moveGroupMember(group.id, fromEntityId = members[2], toEntityId = members[0])
+        advanceUntilIdle()
+
+        assertEquals(listOf(members[2], members[0], members[1]), groupContaining(members[0]).entityIds)
+    }
+
+    @Test
+    fun `Given a group when moveGroupMember drags a member onto itself then the member order is unchanged`() = runTest {
+        val group = givenGroupOf("light.ga3", "light.gb3", "light.gc3")
+        val members = group.entityIds
+
+        viewModel.moveGroupMember(group.id, fromEntityId = members[1], toEntityId = members[1])
+        advanceUntilIdle()
+
+        assertEquals(members, groupContaining(members[0]).entityIds)
+    }
+
+    @Test
+    fun `Given an unknown group when moveGroupMember is called then no exception is thrown`() = runTest {
+        val group = givenGroupOf("light.ga4", "light.gb4", "light.gc4")
+        val members = group.entityIds
+
+        viewModel.moveGroupMember("group_does_not_exist", fromEntityId = members[0], toEntityId = members[1])
+        advanceUntilIdle()
+
+        assertEquals(members, groupContaining(members[0]).entityIds)
+    }
+
+    private fun entityKey(entityId: String) = "${OverviewViewModel.ENTITY_ITEM_PREFIX}$entityId"
+
+    private suspend fun TestScope.givenEntitiesAndGroup(
+        groupLightIds: List<String>,
+        extraLightIds: List<String>,
+    ): OverviewLightGroup {
+        val all = (groupLightIds + extraLightIds).map { entityOf(it, state = "on") }
+        givenEntities(*all.toTypedArray())
+        viewModel.saveLightGroup(groupId = null, name = "Group", entityIds = groupLightIds, colorArgb = null)
+        advanceUntilIdle()
+        return groupContaining(groupLightIds.first())
+    }
+
+    @Test
+    fun `Given a top-level light and a group when moveEntityIntoGroup targets a member then the light joins before that member`() = runTest {
+        val group = givenEntitiesAndGroup(groupLightIds = listOf("light.gi1", "light.gi2"), extraLightIds = listOf("light.ei1"))
+
+        viewModel.moveEntityIntoGroup(entityId = "light.ei1", groupId = group.id, targetEntityId = "light.gi2")
+        advanceUntilIdle()
+
+        assertEquals(listOf("light.gi1", "light.ei1", "light.gi2"), groupContaining("light.ei1").entityIds)
+    }
+
+    @Test
+    fun `Given a non-light entity when moveEntityIntoGroup is called then the group is unchanged`() = runTest {
+        givenEntities(entityOf("light.gn1", state = "on"), entityOf("light.gn2", state = "on"), entityOf("switch.sn1", state = "on"))
+        viewModel.saveLightGroup(groupId = null, name = "Group", entityIds = listOf("light.gn1", "light.gn2"), colorArgb = null)
+        advanceUntilIdle()
+        val group = groupContaining("light.gn1")
+
+        viewModel.moveEntityIntoGroup(entityId = "switch.sn1", groupId = group.id, targetEntityId = "light.gn2")
+        advanceUntilIdle()
+
+        assertEquals(listOf("light.gn1", "light.gn2"), groupContaining("light.gn1").entityIds)
+    }
+
+    @Test
+    fun `Given a light already in the group when moveEntityIntoGroup targets another member then it is reordered`() = runTest {
+        val group = givenEntitiesAndGroup(groupLightIds = listOf("light.gr1", "light.gr2", "light.gr3"), extraLightIds = emptyList())
+        val members = group.entityIds
+
+        viewModel.moveEntityIntoGroup(entityId = members[0], groupId = group.id, targetEntityId = members[2])
+        advanceUntilIdle()
+
+        assertEquals(listOf(members[1], members[2], members[0]), groupContaining(members[0]).entityIds)
+    }
+
+    @Test
+    fun `Given an unknown group when moveEntityIntoGroup is called then the source group is unchanged`() = runTest {
+        val group = givenEntitiesAndGroup(groupLightIds = listOf("light.gu1", "light.gu2"), extraLightIds = listOf("light.eu1"))
+
+        viewModel.moveEntityIntoGroup(entityId = "light.eu1", groupId = "group_does_not_exist", targetEntityId = "light.gu1")
+        advanceUntilIdle()
+
+        assertEquals(listOf("light.gu1", "light.gu2"), groupContaining("light.gu1").entityIds)
+    }
+
+    @Test
+    fun `Given a group of three and a top-level light when moveEntityOutOfGroup targets the light then the member leaves and lands next to it`() = runTest {
+        val group = givenEntitiesAndGroup(groupLightIds = listOf("light.go1", "light.go2", "light.go3"), extraLightIds = listOf("light.eo1"))
+        val members = group.entityIds
+
+        viewModel.moveEntityOutOfGroup(groupId = group.id, entityId = members[0], targetKey = entityKey("light.eo1"))
+        advanceUntilIdle()
+
+        assertEquals(listOf(members[1], members[2]), groupContaining(members[1]).entityIds)
+        val order = currentItemOrder()
+        val movedIndex = order.indexOf(entityKey(members[0]))
+        val targetIndex = order.indexOf(entityKey("light.eo1"))
+        assertEquals(1, kotlin.math.abs(movedIndex - targetIndex))
+    }
+
+    @Test
+    fun `Given a group of exactly two when moveEntityOutOfGroup removes one then the group dissolves`() = runTest {
+        val group = givenEntitiesAndGroup(groupLightIds = listOf("light.gd1", "light.gd2"), extraLightIds = listOf("light.ed1"))
+
+        viewModel.moveEntityOutOfGroup(groupId = group.id, entityId = "light.gd1", targetKey = entityKey("light.ed1"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value as OverviewUiState.Success
+        assertEquals(emptyList<OverviewLightGroup>(), state.lightGroups)
+    }
+
+    @Test
+    fun `Given an entity not in the group when moveEntityOutOfGroup is called then no exception is thrown`() = runTest {
+        val group = givenEntitiesAndGroup(groupLightIds = listOf("light.gx1", "light.gx2", "light.gx3"), extraLightIds = listOf("light.ex1"))
+
+        viewModel.moveEntityOutOfGroup(groupId = group.id, entityId = "light.ex1", targetKey = entityKey("light.gx1"))
+        advanceUntilIdle()
+
+        assertEquals(listOf("light.gx1", "light.gx2", "light.gx3"), groupContaining("light.gx1").entityIds)
     }
 }

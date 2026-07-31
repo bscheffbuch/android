@@ -4,17 +4,20 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.Text
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import io.homeassistant.companion.android.common.R
+import io.homeassistant.companion.android.common.compose.composable.HASettingsRow
+import io.homeassistant.companion.android.common.compose.composable.HASettingsSubheader
+import io.homeassistant.companion.android.common.compose.theme.HATextStyle
+import io.homeassistant.companion.android.common.compose.theme.HAThemeForPreview
+import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import io.homeassistant.companion.android.common.util.GestureAction
 import io.homeassistant.companion.android.common.util.HAGesture
-import io.homeassistant.companion.android.settings.views.SettingsRow
-import io.homeassistant.companion.android.settings.views.SettingsSubheader
 import io.homeassistant.companion.android.util.plus
 import io.homeassistant.companion.android.util.safeBottomPaddingValues
 
@@ -38,6 +41,8 @@ fun GesturesListView(
         item {
             Text(
                 text = stringResource(R.string.gestures_description),
+                style = HATextStyle.Body,
+                color = LocalHAColorScheme.current.colorTextSecondary,
                 modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
             )
         }
@@ -45,26 +50,31 @@ fun GesturesListView(
         val gesturesGrouped = HAGesture.entries.groupBy { it.direction }
         gesturesGrouped.forEach { (direction, gestures) ->
             item {
-                SettingsSubheader(stringResource(direction.description))
+                HASettingsSubheader(
+                    text = stringResource(direction.description),
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
             }
             items(gestures) { gesture ->
                 val action = gestureActions[gesture]
-                SettingsRow(
+                HASettingsRow(
                     primaryText = stringResource(gesture.pointers.description),
                     secondaryText = action?.let { stringResource(it.description) } ?: "",
-                    icon = null,
                     onClicked = { onGestureClicked(gesture) },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }
         }
     }
 }
 
-@Preview
+@PreviewLightDark
 @Composable
 private fun PreviewGesturesListView() {
-    GesturesListView(
-        gestureActions = HAGesture.entries.associateWith { GestureAction.NONE },
-        onGestureClicked = { _ -> },
-    )
+    HAThemeForPreview {
+        GesturesListView(
+            gestureActions = HAGesture.entries.associateWith { GestureAction.NONE },
+            onGestureClicked = { _ -> },
+        )
+    }
 }

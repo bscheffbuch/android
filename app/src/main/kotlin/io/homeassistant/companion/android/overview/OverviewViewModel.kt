@@ -868,6 +868,103 @@ class OverviewViewModel @Inject constructor(
         saveLightGroup(group.id, group.name, group.entityIds - entityId, group.colorArgb)
     }
 
+    /**
+     * Reorders a light group's members live as one is dragged over another inside the expanded
+     * group card, using the same insertion (move) semantics as the top-level grid's
+     * [moveItem]: [fromEntityId] is lifted out of the group's ordered [OverviewLightGroup.entityIds]
+     * and re-inserted next to [toEntityId], shifting the members in between by one so the displaced
+     * cards cascade past the dragged one instead of a single pair swapping. Direction is inferred
+     * from the original positions so the member always lands on the side the drag came from.
+     *
+     * The new order is persisted (the group's member order is part of its stored definition), so a
+     * reorder survives collapse/expand and app restarts just like a top-level reorder.
+     */
+    fun moveGroupMember(groupId: String, fromEntityId: String, toEntityId: String) {
+        if (fromEntityId == toEntityId) return
+        val group = lightGroups.firstOrNull { it.id == groupId } ?: return
+        val updated = group.entityIds.toMutableList()
+        val fromIndex = updated.indexOf(fromEntityId)
+        val toIndex = updated.indexOf(toEntityId)
+        if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) return
+        updated.removeAt(fromIndex)
+        val insertIndex = updated.indexOf(toEntityId).let { if (fromIndex < toIndex) it + 1 else it }
+        updated.add(insertIndex, fromEntityId)
+        lightGroups = lightGroups.map { if (it.id == groupId) it.copy(entityIds = updated) else it }
+        saveLightGroups()
+        emitSuccess()
+    }
+
+    /** The id of the light group currently containing [entityId], or null when it is not grouped. */
+    private fun currentGroupIdOf(entityId: String): String? = lightGroups.firstOrNull { entityId in it.entityIds }?.id
+
+    /**
+     * Live cross-boundary move used while an entity is dragged **into** an expanded light group from
+     * the top-level grid (or from a different group): places [entityId] next to member
+     * [targetEntityId] inside group [groupId]. Only lights can join a light group, so this is a no-op
+     * for any other domain.
+     *
+     * If [entityId] is already a member of [groupId] it is simply reordered next to [targetEntityId]
+     * ([moveGroupMember]); otherwise it is removed from whatever group it previously belonged to and
+     * inserted immediately before [targetEntityId]. As the finger keeps moving over other members the
+     * usual insertion-move ([moveGroupMember]) takes over, so that first landing point self-corrects.
+     *
+     * The new membership is persisted. A source group left with fewer than two lights dissolves via
+     * the usual sanitize on the next emit, exactly like [removeLightFromGroup].
+     */
+    fun moveEntityIntoGroup(entityId: String, groupId: String, targetEntityId: String) {
+        if (entityId == targetEntityId) return
+        if (entityMap[entityId]?.domain != "light") return
+        val targetGroup = lightGroups.firstOrNull { it.id == groupId } ?: return
+        if (targetEntityId !in targetGroup.entityIds) return
+        val sourceGroupId = currentGroupIdOf(entityId)
+        if (sourceGroupId == groupId) {
+            moveGroupMember(groupId = groupId, fromEntityId = entityId, toEntityId = targetEntityId)
+            return
+        }
+        lightGroups = lightGroups.map { group ->
+            when (group.id) {
+                sourceGroupId -> group.copy(entityIds = group.entityIds - entityId)
+                groupId -> {
+                    val ids = group.entityIds.toMutableList().apply { remove(entityId) }
+                    val insertIndex = ids.indexOf(targetEntityId).coerceAtLeast(0)
+                    ids.add(insertIndex, entityId)
+                    group.copy(entityIds = ids)
+                }
+                else -> group
+            }
+        }
+        saveLightGroups()
+        emitSuccess()
+    }
+
+    /**
+     * Live cross-boundary move used while a member is dragged **out** of its expanded light group onto
+     * a top-level cell: removes [entityId] from group [groupId] and repositions its top-level key next
+     * to [targetKey] in [itemOrder] using the same insertion semantics as [moveItem], so the card
+     * lands where the finger is instead of snapping back to its stored slot. If removing it leaves the
+     * group with fewer than two lights the group dissolves via the usual sanitize on the next emit.
+     */
+    fun moveEntityOutOfGroup(groupId: String, entityId: String, targetKey: String) {
+        val group = lightGroups.firstOrNull { it.id == groupId } ?: return
+        if (entityId !in group.entityIds) return
+        val sourceKey = entityKey(entityId)
+        if (sourceKey == targetKey) return
+        lightGroups = lightGroups.map { if (it.id == groupId) it.copy(entityIds = it.entityIds - entityId) else it }
+        val updated = itemOrder.toMutableList()
+        if (sourceKey !in updated) updated.add(sourceKey)
+        val fromIndex = updated.indexOf(sourceKey)
+        val toIndex = updated.indexOf(targetKey)
+        if (toIndex >= 0 && fromIndex != toIndex) {
+            updated.removeAt(fromIndex)
+            val insertIndex = updated.indexOf(targetKey).let { if (fromIndex < toIndex) it + 1 else it }
+            updated.add(insertIndex, sourceKey)
+        }
+        itemOrder = updated
+        saveLightGroups()
+        saveItemOrder()
+        emitSuccess()
+    }
+
     fun createLightGroupFromEntities(firstEntityId: String, secondEntityId: String) {
         val first = entityMap[firstEntityId] ?: return
         val second = entityMap[secondEntityId] ?: return
@@ -917,12 +1014,26 @@ class OverviewViewModel @Inject constructor(
         emitSuccess()
     }
 
+    /**
+     * Reorders [fromKey] to sit at [toKey]'s slot using insertion (move) semantics rather than a
+     * two-cell swap: the source key is lifted out of the order and re-inserted next to the target,
+     * shifting every key in between by one. This is what lets the grid "shuffle" live as a card is
+     * dragged — repeatedly moving the dragged item one target at a time opens a gap that follows the
+     * finger, with the displaced cards cascading past it instead of a single pair trading places.
+     *
+     * Direction is inferred from the original positions: dragging the source past a target that was
+     * ahead of it inserts *after* that target, dragging it past a target that was behind inserts
+     * *before*, so the dragged item always lands on the side the drag came from.
+     */
     fun moveItem(fromKey: String, toKey: String) {
+        if (fromKey == toKey) return
         val updated = itemOrder.toMutableList()
         val fromIndex = updated.indexOf(fromKey)
         val toIndex = updated.indexOf(toKey)
-        if (fromIndex !in updated.indices || toIndex !in updated.indices || fromIndex == toIndex) return
-        updated[fromIndex] = updated[toIndex].also { updated[toIndex] = updated[fromIndex] }
+        if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) return
+        updated.removeAt(fromIndex)
+        val insertIndex = updated.indexOf(toKey).let { if (fromIndex < toIndex) it + 1 else it }
+        updated.add(insertIndex, fromKey)
         itemOrder = updated
         saveItemOrder()
         emitSuccess()

@@ -1,22 +1,24 @@
 package io.homeassistant.companion.android.settings.notification.views
 
 import android.widget.TextView
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Text
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.text.HtmlCompat
 import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.composable.HASettingsSubheader
+import io.homeassistant.companion.android.common.compose.theme.HADimens
+import io.homeassistant.companion.android.common.compose.theme.HATextStyle
+import io.homeassistant.companion.android.common.compose.theme.HAThemeForPreview
+import io.homeassistant.companion.android.common.compose.theme.LocalHAColorScheme
 import io.homeassistant.companion.android.database.notification.NotificationItem
 import io.homeassistant.companion.android.util.notificationItem
 import io.homeassistant.companion.android.util.safeBottomPaddingValues
@@ -27,28 +29,44 @@ import kotlinx.serialization.json.Json
 @Composable
 fun LoadNotification(notification: NotificationItem, modifier: Modifier = Modifier) {
     val scrollState = rememberScrollState()
-    val valueModifier = Modifier.padding(start = 24.dp)
+    val valueModifier = Modifier.padding(start = HADimens.SPACE6)
+    val colorScheme = LocalHAColorScheme.current
 
     Column(
         modifier = modifier
             .verticalScroll(scrollState)
             .padding(safeBottomPaddingValues(applyHorizontal = false)),
     ) {
-        NotificationDetailViewHeader(stringId = commonR.string.notification_received_at)
+        HASettingsSubheader(
+            text = stringResource(commonR.string.notification_received_at),
+            modifier = Modifier.padding(start = HADimens.SPACE4, top = HADimens.SPACE8),
+        )
         val cal: Calendar = GregorianCalendar()
         cal.timeInMillis = notification.received
         Text(
             text = cal.time.toString(),
+            style = HATextStyle.Body,
+            color = colorScheme.colorTextPrimary,
+            textAlign = TextAlign.Start,
             modifier = valueModifier,
         )
 
-        NotificationDetailViewHeader(stringId = commonR.string.notification_source)
+        HASettingsSubheader(
+            text = stringResource(commonR.string.notification_source),
+            modifier = Modifier.padding(start = HADimens.SPACE4, top = HADimens.SPACE8),
+        )
         Text(
             text = notification.source,
+            style = HATextStyle.Body,
+            color = colorScheme.colorTextPrimary,
+            textAlign = TextAlign.Start,
             modifier = valueModifier,
         )
 
-        NotificationDetailViewHeader(stringId = commonR.string.notification_message)
+        HASettingsSubheader(
+            text = stringResource(commonR.string.notification_message),
+            modifier = Modifier.padding(start = HADimens.SPACE4, top = HADimens.SPACE8),
+        )
         AndroidView(
             factory = { context ->
                 TextView(context).apply {
@@ -59,7 +77,10 @@ fun LoadNotification(notification: NotificationItem, modifier: Modifier = Modifi
             modifier = valueModifier,
         )
 
-        NotificationDetailViewHeader(stringId = commonR.string.notification_data)
+        HASettingsSubheader(
+            text = stringResource(commonR.string.notification_data),
+            modifier = Modifier.padding(start = HADimens.SPACE4, top = HADimens.SPACE8),
+        )
         val notifData =
             // Try to pretty print the JSON
             try {
@@ -74,24 +95,18 @@ fun LoadNotification(notification: NotificationItem, modifier: Modifier = Modifi
             }
         Text(
             text = notifData,
-            modifier = valueModifier.then(Modifier.padding(bottom = 16.dp)),
+            style = HATextStyle.Body,
+            color = colorScheme.colorTextPrimary,
+            textAlign = TextAlign.Start,
+            modifier = valueModifier.then(Modifier.padding(bottom = HADimens.SPACE4)),
         )
     }
 }
 
-@Composable
-fun NotificationDetailViewHeader(@StringRes stringId: Int, modifier: Modifier = Modifier) {
-    Text(
-        text = stringResource(stringId),
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 20.sp,
-        modifier = modifier
-            .padding(top = 32.dp, bottom = 16.dp, start = 16.dp),
-    )
-}
-
-@Preview
+@PreviewLightDark
 @Composable
 private fun PreviewNotificationDetails() {
-    LoadNotification(notification = notificationItem)
+    HAThemeForPreview {
+        LoadNotification(notification = notificationItem)
+    }
 }

@@ -44,6 +44,21 @@ interface IntegrationRepository {
 
     suspend fun callAction(domain: String, action: String, actionData: Map<String, Any?>)
 
+    /**
+     * Creates or overwrites a persistent scene on the server through Home Assistant's scene config
+     * endpoint. Unlike the runtime `scene.create` action, a scene saved this way survives a server
+     * restart because Home Assistant stores it alongside its other UI-editable scenes.
+     *
+     * @param sceneId Unique identifier used as the scene's config resource path.
+     * @param name Human-readable scene name shown in Home Assistant.
+     * @param entities Map of entity id to the state to restore, where each value is either a bare
+     *   state string or a map of "state" plus domain-specific attributes (for example brightness
+     *   for a light).
+     * @return `true` when the server accepted the scene, `false` when the request failed, for
+     *   example when the server does not store scenes in a UI-editable location.
+     */
+    suspend fun saveScene(sceneId: String, name: String, entities: Map<String, Any?>): Boolean
+
     suspend fun scanTag(data: Map<String, String>)
 
     suspend fun fireEvent(eventType: String, eventData: Map<String, Any>)

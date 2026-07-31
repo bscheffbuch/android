@@ -11,11 +11,11 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import dagger.hilt.android.AndroidEntryPoint
 import io.homeassistant.companion.android.common.R as commonR
+import io.homeassistant.companion.android.common.compose.theme.HATheme
 import io.homeassistant.companion.android.settings.SettingViewModel
 import io.homeassistant.companion.android.settings.SettingViewModel.Companion.DEFAULT_UPDATE_FREQUENCY
 import io.homeassistant.companion.android.settings.addHelpMenuProvider
 import io.homeassistant.companion.android.settings.sensor.views.SensorUpdateFrequencyView
-import io.homeassistant.companion.android.util.compose.HomeAssistantAppTheme
 
 @AndroidEntryPoint
 class SensorUpdateFrequencyFragment : Fragment() {
@@ -25,7 +25,7 @@ class SensorUpdateFrequencyFragment : Fragment() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         return ComposeView(requireContext()).apply {
             setContent {
-                HomeAssistantAppTheme {
+                HATheme {
                     // 0 is used for storing app level settings
                     val settingFlow = remember { viewModel.getSettingFlow(0) }
                     val settings = settingFlow.collectAsState(null)

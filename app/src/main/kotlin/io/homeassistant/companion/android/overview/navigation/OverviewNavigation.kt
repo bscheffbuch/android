@@ -52,6 +52,7 @@ internal fun NavGraphBuilder.overviewLandingScreen(navController: NavController)
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
         val automationsViewModel: AutomationsViewModel = hiltViewModel()
         val automationsUiState by automationsViewModel.uiState.collectAsStateWithLifecycle()
+        val saveSceneDialogState by automationsViewModel.saveSceneDialogState.collectAsStateWithLifecycle()
         var selectedTab by remember { mutableStateOf(HomeContentTab.HOME) }
 
         // Settings hosts this same bottom bar (see SettingsActivity's showHomeNavBar) and reports
@@ -111,6 +112,15 @@ internal fun NavGraphBuilder.overviewLandingScreen(navController: NavController)
                         onRemoveEntityFromGroup = { groupId, entityId ->
                             viewModel.removeLightFromGroup(groupId, entityId)
                         },
+                        onMoveGroupMember = { groupId, fromEntityId, toEntityId ->
+                            viewModel.moveGroupMember(groupId, fromEntityId, toEntityId)
+                        },
+                        onMoveEntityIntoGroup = { entityId, groupId, targetEntityId ->
+                            viewModel.moveEntityIntoGroup(entityId, groupId, targetEntityId)
+                        },
+                        onMoveEntityOutOfGroup = { groupId, entityId, targetKey ->
+                            viewModel.moveEntityOutOfGroup(groupId, entityId, targetKey)
+                        },
                         onGroupExpandedChange = { groupId, expanded ->
                             viewModel.setLightGroupExpanded(groupId, expanded)
                         },
@@ -156,6 +166,10 @@ internal fun NavGraphBuilder.overviewLandingScreen(navController: NavController)
                         // Embedded as a bottom-nav tab, not pushed onto the back stack, so there is no
                         // "back" destination to pop — the tab switch itself is the navigation.
                         onNavigateBack = null,
+                        saveSceneDialogState = saveSceneDialogState,
+                        onCreateSceneClicked = automationsViewModel::onCreateSceneClicked,
+                        onDismissCreateScene = automationsViewModel::onDismissCreateScene,
+                        onSaveScene = automationsViewModel::saveScene,
                     )
                 }
             }

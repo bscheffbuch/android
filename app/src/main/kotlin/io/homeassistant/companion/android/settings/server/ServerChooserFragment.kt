@@ -11,8 +11,8 @@ import androidx.core.os.bundleOf
 import androidx.fragment.app.setFragmentResult
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import dagger.hilt.android.AndroidEntryPoint
+import io.homeassistant.companion.android.common.compose.theme.HATheme
 import io.homeassistant.companion.android.common.data.servers.ServerManager
-import io.homeassistant.companion.android.util.compose.HomeAssistantAppTheme
 import io.homeassistant.companion.android.util.setLayoutAndExpandedByDefault
 import javax.inject.Inject
 
@@ -35,7 +35,7 @@ class ServerChooserFragment : BottomSheetDialogFragment() {
                 val servers by produceState(initialValue = emptyList()) {
                     value = serverManager.servers()
                 }
-                HomeAssistantAppTheme {
+                HATheme {
                     ServerChooserView(
                         servers = servers,
                         onServerSelected = { serverId ->

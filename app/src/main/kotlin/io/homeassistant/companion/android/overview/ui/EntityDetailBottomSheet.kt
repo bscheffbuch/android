@@ -473,7 +473,7 @@ private fun ValueRow(label: String, value: String) {
 }
 
 @Composable
-private fun ColorWheel(selectedColor: Color?, onColorSelected: (Color) -> Unit, modifier: Modifier = Modifier) {
+internal fun ColorWheel(selectedColor: Color?, onColorSelected: (Color) -> Unit, modifier: Modifier = Modifier) {
     val colors = LocalHAColorScheme.current
     val radiusPx = with(LocalDensity.current) { 110.dp.toPx() }
     val wheelColors = remember {

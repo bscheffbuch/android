@@ -1504,6 +1504,12 @@
     <string name="overview_scenes_tab">Scenes</string>
     <string name="automations_scenes_title">Automations &amp; Scenes</string>
     <string name="automations_scene_activate">Activate scene</string>
+    <string name="overview_save_scene_dialog_title">Save as scene</string>
+    <string name="overview_save_scene_name_label">Scene name</string>
+    <string name="overview_save_scene_entities_header">Entities to include</string>
+    <string name="overview_save_scene_empty">No controllable entities to save</string>
+    <string name="overview_save_scene_success">Saved scene “%1$s”</string>
+    <string name="overview_save_scene_error">Couldn\'t save the scene. Your server may not allow editing scenes here.</string>
     <string name="overview_media_player_previous_track">Previous track</string>
     <string name="overview_media_player_next_track">Next track</string>
     <string name="overview_humidifier_decrease_humidity">Decrease target humidity</string>

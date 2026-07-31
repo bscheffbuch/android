@@ -6,6 +6,7 @@ import io.homeassistant.companion.android.common.data.integration.impl.entities.
 import io.homeassistant.companion.android.common.data.integration.impl.entities.RateLimitRequest
 import io.homeassistant.companion.android.common.data.integration.impl.entities.RegisterDeviceRequest
 import io.homeassistant.companion.android.common.data.integration.impl.entities.RegisterDeviceResponse
+import io.homeassistant.companion.android.common.data.integration.impl.entities.SceneConfigRequest
 import io.homeassistant.companion.android.common.data.integration.impl.entities.UpdateSensorResponse
 import io.homeassistant.companion.android.common.data.websocket.impl.entities.GetConfigResponse
 import kotlinx.serialization.json.JsonObject
@@ -32,6 +33,13 @@ interface IntegrationService {
 
     @GET
     suspend fun getStates(@Url url: HttpUrl, @Header("Authorization") auth: String): List<EntityResponse>
+
+    @POST
+    suspend fun saveSceneConfig(
+        @Url url: HttpUrl,
+        @Header("Authorization") auth: String,
+        @Body request: SceneConfigRequest,
+    ): Response<ResponseBody>
 
     @POST
     suspend fun callWebhook(@Url url: HttpUrl, @Body request: IntegrationRequest): Response<ResponseBody>

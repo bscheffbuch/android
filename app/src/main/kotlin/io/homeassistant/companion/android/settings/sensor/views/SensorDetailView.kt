@@ -25,26 +25,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.Card
-import androidx.compose.material.Checkbox
-import androidx.compose.material.CircularProgressIndicator
-import androidx.compose.material.ContentAlpha
-import androidx.compose.material.Divider
-import androidx.compose.material.LocalContentAlpha
-import androidx.compose.material.MaterialTheme
-import androidx.compose.material.RadioButton
-import androidx.compose.material.Scaffold
-import androidx.compose.material.SnackbarHost
-import androidx.compose.material.SnackbarResult
-import androidx.compose.material.Surface
-import androidx.compose.material.Switch
-import androidx.compose.material.SwitchDefaults
-import androidx.compose.material.Text
-import androidx.compose.material.TextField
-import androidx.compose.material.contentColorFor
-import androidx.compose.material.rememberScaffoldState
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -73,6 +70,8 @@ import com.mikepenz.iconics.compose.Image
 import com.mikepenz.iconics.typeface.library.community.material.CommunityMaterial
 import io.homeassistant.companion.android.common.R as commonR
 import io.homeassistant.companion.android.common.compose.composable.HAHint
+import io.homeassistant.companion.android.common.compose.composable.HAHorizontalDivider
+import io.homeassistant.companion.android.common.compose.composable.HASettingsSubheader
 import io.homeassistant.companion.android.common.sensors.SensorManager
 import io.homeassistant.companion.android.common.util.kotlinJsonMapper
 import io.homeassistant.companion.android.database.sensor.SensorSetting
@@ -81,13 +80,19 @@ import io.homeassistant.companion.android.database.sensor.SensorWithAttributes
 import io.homeassistant.companion.android.database.settings.SensorUpdateFrequencySetting
 import io.homeassistant.companion.android.sensors.HealthConnectSensorManager
 import io.homeassistant.companion.android.settings.sensor.SensorDetailViewModel
-import io.homeassistant.companion.android.settings.views.SettingsSubheader
 import io.homeassistant.companion.android.util.compose.MdcAlertDialog
 import io.homeassistant.companion.android.util.compose.TransparentChip
 import io.homeassistant.companion.android.util.safeBottomPaddingValues
 import io.homeassistant.companion.android.util.safeBottomWindowInsets
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+
+// Material3 has no LocalContentAlpha propagation like Material2 did, so these approximate
+// the same emphasis levels via explicit Modifier.alpha() calls where this file needs to
+// visually de-emphasize disabled sensors/settings.
+private const val CONTENT_ALPHA_HIGH = 1f
+private const val CONTENT_ALPHA_MEDIUM = 0.6f
+private const val CONTENT_ALPHA_DISABLED = 0.38f
 
 @Composable
 fun SensorDetailView(
@@ -113,10 +118,10 @@ fun SensorDetailView(
                 )
     }
 
-    val scaffoldState = rememberScaffoldState()
+    val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect("snackbar") {
         viewModel.permissionSnackbar.onEach {
-            scaffoldState.snackbarHostState.showSnackbar(
+            snackbarHostState.showSnackbar(
                 context.getString(it.message),
                 context.getString(commonR.string.settings),
             ).let { result ->
@@ -144,10 +149,9 @@ fun SensorDetailView(
 
     Scaffold(
         modifier = modifier,
-        scaffoldState = scaffoldState,
         snackbarHost = {
             SnackbarHost(
-                hostState = scaffoldState.snackbarHostState,
+                hostState = snackbarHostState,
                 modifier = Modifier.windowInsetsPadding(safeBottomWindowInsets(applyHorizontal = false)),
             )
         },
@@ -244,7 +248,10 @@ fun SensorDetailView(
                 viewModel.sensor?.let { sensor ->
                     if (sensor.sensor.enabled && sensor.attributes.isNotEmpty()) {
                         item {
-                            SettingsSubheader(stringResource(commonR.string.attributes))
+                            HASettingsSubheader(
+                                text = stringResource(commonR.string.attributes),
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            )
                         }
                         items(sensor.attributes, key = { "${it.sensorId}-${it.name}" }) { attribute ->
                             val summary = when (attribute.valueType) {
@@ -278,7 +285,10 @@ fun SensorDetailView(
                     }
                     if (sensor.sensor.enabled && viewModel.sensorSettings.value.isNotEmpty()) {
                         item {
-                            SettingsSubheader(stringResource(commonR.string.sensor_settings))
+                            HASettingsSubheader(
+                                text = stringResource(commonR.string.sensor_settings),
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            )
                         }
                         items(viewModel.sensorSettings.value, key = { "${it.sensorId}-${it.name}" }) { setting ->
                             when (setting.valueType) {
@@ -367,74 +377,69 @@ fun SensorDetailTopPanel(
         color = colorResource(commonR.color.colorSensorTopBackground),
     ) {
         Column {
-            CompositionLocalProvider(
-                LocalContentAlpha provides (if (sensor?.enabled == true) ContentAlpha.high else ContentAlpha.disabled),
+            val cardElevation: Dp by animateDpAsState(if (sensor?.enabled == true) 8.dp else 1.dp)
+            Card(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 32.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
             ) {
-                val cardElevation: Dp by animateDpAsState(if (sensor?.enabled == true) 8.dp else 1.dp)
-                Card(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 32.dp),
-                    elevation = cardElevation,
+                Row(
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(all = 16.dp)
+                        .fillMaxWidth()
+                        .alpha(if (sensor?.enabled == true) CONTENT_ALPHA_HIGH else CONTENT_ALPHA_DISABLED),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .background(MaterialTheme.colors.background)
-                            .padding(all = 16.dp)
-                            .fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        var iconToUse = basicSensor.statelessIcon
-                        if (sensor?.enabled == true && sensor.icon.isNotBlank()) {
-                            iconToUse = sensor.icon
-                        }
-                        val mdiIcon = try {
-                            IconicsDrawable(context, "cmd-${iconToUse.split(":")[1]}").icon
-                        } catch (e: Exception) {
-                            null
-                        }
+                    var iconToUse = basicSensor.statelessIcon
+                    if (sensor?.enabled == true && sensor.icon.isNotBlank()) {
+                        iconToUse = sensor.icon
+                    }
+                    val mdiIcon = try {
+                        IconicsDrawable(context, "cmd-${iconToUse.split(":")[1]}").icon
+                    } catch (e: Exception) {
+                        null
+                    }
 
-                        if (mdiIcon != null) {
-                            Image(
-                                asset = mdiIcon,
-                                contentDescription = stringResource(commonR.string.icon),
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .alpha(if (sensor?.enabled == true) ContentAlpha.high else ContentAlpha.disabled),
-                                colorFilter = ColorFilter.tint(
-                                    if (sensor?.enabled == true) {
-                                        colorResource(commonR.color.colorSensorIconEnabled)
-                                    } else {
-                                        contentColorFor(backgroundColor = MaterialTheme.colors.background)
-                                    },
-                                ),
-                            )
-                            Spacer(modifier = Modifier.width(16.dp))
-                        }
-                        Text(
-                            text = stringResource(basicSensor.name),
-                            modifier = Modifier
-                                .padding(end = 16.dp)
-                                .weight(0.5f),
-                        )
-                        SelectionContainer(modifier = Modifier.weight(0.5f)) {
-                            Text(
-                                text = if (sensor?.enabled == true) {
-                                    if (sensor.state.isBlank()) {
-                                        stringResource(commonR.string.enabled)
-                                    } else {
-                                        if (sensor.unitOfMeasurement.isNullOrBlank() ||
-                                            sensor.state.toDoubleOrNull() == null
-                                        ) {
-                                            sensor.state
-                                        } else {
-                                            "${sensor.state} ${sensor.unitOfMeasurement}"
-                                        }
-                                    }
+                    if (mdiIcon != null) {
+                        Image(
+                            asset = mdiIcon,
+                            contentDescription = stringResource(commonR.string.icon),
+                            modifier = Modifier.size(24.dp),
+                            colorFilter = ColorFilter.tint(
+                                if (sensor?.enabled == true) {
+                                    colorResource(commonR.color.colorSensorIconEnabled)
                                 } else {
-                                    stringResource(commonR.string.disabled)
+                                    contentColorFor(backgroundColor = MaterialTheme.colorScheme.background)
                                 },
-                                textAlign = TextAlign.End,
-                            )
-                        }
+                            ),
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                    }
+                    Text(
+                        text = stringResource(basicSensor.name),
+                        modifier = Modifier
+                            .padding(end = 16.dp)
+                            .weight(0.5f),
+                    )
+                    SelectionContainer(modifier = Modifier.weight(0.5f)) {
+                        Text(
+                            text = if (sensor?.enabled == true) {
+                                if (sensor.state.isBlank()) {
+                                    stringResource(commonR.string.enabled)
+                                } else {
+                                    if (sensor.unitOfMeasurement.isNullOrBlank() ||
+                                        sensor.state.toDoubleOrNull() == null
+                                    ) {
+                                        sensor.state
+                                    } else {
+                                        "${sensor.state} ${sensor.unitOfMeasurement}"
+                                    }
+                                }
+                            } else {
+                                stringResource(commonR.string.disabled)
+                            },
+                            textAlign = TextAlign.End,
+                        )
                     }
                 }
             }
@@ -458,7 +463,7 @@ fun SensorDetailTopPanel(
                     )
                 }
             }
-            Divider()
+            HAHorizontalDivider()
         }
     }
 }
@@ -539,42 +544,41 @@ fun SensorDetailRow(
             .then(rowModifier)
     }
     Row(
-        modifier = modifier.then(rowModifier),
+        modifier = modifier
+            .then(rowModifier)
+            .alpha(if (enabled) CONTENT_ALPHA_HIGH else CONTENT_ALPHA_DISABLED),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CompositionLocalProvider(
-            LocalContentAlpha provides (if (enabled) ContentAlpha.high else ContentAlpha.disabled),
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .weight(1f),
+            verticalArrangement = Arrangement.Center,
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .weight(1f),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Text(text = title, style = MaterialTheme.typography.body1)
-                if (summary != null) {
-                    CompositionLocalProvider(
-                        LocalContentAlpha provides (if (enabled) ContentAlpha.medium else ContentAlpha.disabled),
-                    ) {
-                        if (selectingEnabled) {
-                            SelectionContainer { Text(text = summary, style = MaterialTheme.typography.body2) }
-                        } else {
-                            Text(text = summary, style = MaterialTheme.typography.body2)
-                        }
+            Text(text = title, style = MaterialTheme.typography.bodyLarge)
+            if (summary != null) {
+                // The row itself is already dimmed above when !enabled, so the extra "medium
+                // emphasis" alpha only needs to apply in the enabled case, to avoid double-dimming.
+                val summaryModifier = Modifier.alpha(if (enabled) CONTENT_ALPHA_MEDIUM else CONTENT_ALPHA_HIGH)
+                if (selectingEnabled) {
+                    SelectionContainer {
+                        Text(text = summary, style = MaterialTheme.typography.bodyMedium, modifier = summaryModifier)
                     }
+                } else {
+                    Text(text = summary, style = MaterialTheme.typography.bodyMedium, modifier = summaryModifier)
                 }
             }
-            if (switch != null) {
-                Switch(
-                    checked = switch,
-                    onCheckedChange = null,
-                    enabled = clickable,
-                    modifier = Modifier.padding(start = 16.dp),
-                    colors = SwitchDefaults.colors(
-                        uncheckedThumbColor = colorResource(commonR.color.colorSwitchUncheckedThumb),
-                    ),
-                )
-            }
+        }
+        if (switch != null) {
+            Switch(
+                checked = switch,
+                onCheckedChange = null,
+                enabled = clickable,
+                modifier = Modifier.padding(start = 16.dp),
+                colors = SwitchDefaults.colors(
+                    uncheckedThumbColor = colorResource(commonR.color.colorSwitchUncheckedThumb),
+                ),
+            )
         }
     }
 }

@@ -40,19 +40,22 @@ private fun switchColors(): SwitchColors {
     val scheme = LocalHAColorScheme.current
     return with(scheme) {
         SwitchColors(
+            // Filled pill in the mode's loud contrasting tone, with a thumb that "punches through"
+            // to the surface tone
             checkedThumbColor = colorSurfaceDefault,
-            checkedTrackColor = colorFillPrimaryLoudResting,
-            checkedBorderColor = colorFillPrimaryLoudResting,
+            checkedTrackColor = colorTextPrimary,
+            checkedBorderColor = colorTextPrimary,
             // We don't support icon yet in switch
             checkedIconColor = Color.Unspecified,
 
-            uncheckedThumbColor = colorFillNeutralLoudResting,
-            uncheckedTrackColor = colorSurfaceDefault,
-            uncheckedBorderColor = colorBorderNeutralNormal,
+            // Hollow outline pill in the same loud tone as checked, with a solid thumb
+            uncheckedThumbColor = colorTextPrimary,
+            uncheckedTrackColor = colorTextPrimary.copy(alpha = 0f),
+            uncheckedBorderColor = colorTextPrimary,
             // We don't support icon yet in switch
             uncheckedIconColor = Color.Unspecified,
 
-            disabledCheckedThumbColor = colorSurfaceDefault,
+            disabledCheckedThumbColor = colorOnNeutralLoud,
             disabledCheckedTrackColor = colorFillDisabledLoudResting,
             disabledCheckedBorderColor = colorFillDisabledLoudResting,
             // We don't support icon yet in switch
